@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Family PTT Channel</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;600&display=swap');
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0f0420;
+      --surface: #0f0420;
+      --border: #ffffff;
+      --accent: #b388ff;
+      --accent-dim: rgba(179, 136, 255, 0.12);
+      --accent-glow: rgba(179, 136, 255, 0.4);
+      --text: #ffffff;
+      --muted: #888888;
+      --danger: #ff4d6d;
+      --success: #00e5a0;
+      --warning: #ffd166;
+    }
+
+    body {
+      font-family: 'IBM Plex Sans', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1.5rem;
+      touch-action: manipulation;
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background:
+        radial-gradient(ellipse 60% 40% at 50% 0%, rgba(179,136,255,0.06) 0%, transparent 60%),
+        radial-gradient(ellipse 40% 30% at 80% 80%, rgba(149,76,255,0.04) 0%, transparent 50%);
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    #bgCanvas {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 0;
+      display: block;
+    }
+
+    .app {
+      position: relative;
+      z-index: 2;
+      width: 100%;
+      max-width: 480px;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    /* Header */
+    .header { text-align: center; padding: 1.5rem 0 0.5rem; }
+    .logo { display: flex; align-items: center; justify-content: center; gap: 0.6rem; margin-bottom: 0.4rem; }
+    .logo-icon { width: 32px; height: 32px; background: var(--accent-dim); border: 1px solid var(--accent); border-radius: 8px; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 12px var(--accent-glow); }
+    .logo-icon svg { color: #ffffff; }
+    h1 { font-family: 'IBM Plex Mono', monospace; font-size: 1.2rem; font-weight: 600; letter-spacing: 0.05em; }
+    .subtitle { font-size: 0.8rem; color: var(--muted); font-family: 'IBM Plex Mono', monospace; }
+
+    /* Cards & Status */
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 1.25rem; transition: border-color 0.3s; }
+    .card-label { font-family: 'IBM Plex Mono', monospace; font-size: 0.7rem; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 0.9rem; display: flex; align-items: center; gap: 0.5rem; }
+    .card-label::before { content: ''; display: inline-block; width: 3px; height: 12px; background: var(--accent); border-radius: 2px; }
+    
+    .status-bar { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 0.75rem 1rem; display: flex; align-items: center; gap: 0.6rem; font-family: 'IBM Plex Mono', monospace; font-size: 0.8rem; }
+    .status-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
+    .status-dot.connected { background: var(--success); box-shadow: 0 0 8px var(--success); }
+    .status-dot.error { background: var(--danger); box-shadow: 0 0 8px var(--danger); }
+    
+    /* Inputs & Buttons */
+    input[type="text"] { width: 100%; background: #0f0420; border: 1px solid var(--border); border-radius: 6px; padding: 0.8rem 1rem; font-family: 'IBM Plex Mono', monospace; font-size: 0.9rem; color: var(--text); outline: none; margin-bottom: 1rem; }
+    input[type="text"]:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-dim); }
+
+    .btn { background: var(--accent-dim); color: #ffffff; border: 1px solid var(--accent); border-radius: 6px; padding: 0.8rem 1rem; font-family: 'IBM Plex Mono', monospace; font-size: 0.85rem; font-weight: 600; cursor: pointer; letter-spacing: 0.03em; width: 100%; transition: all 0.15s ease; }
+    .btn:hover:not(:disabled) { background: rgba(179,136,255,0.2); box-shadow: 0 0 16px var(--accent-glow); }
+    .btn:disabled { background: rgba(255,255,255,0.04); color: var(--muted); border-color: var(--border); cursor: not-allowed; box-shadow: none; }
+
+    /* Presence List */
+    .members-list { list-style: none; padding: 0; margin: 0; }
+    .members-list li { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; font-family: 'IBM Plex Mono', monospace; font-size: 0.9rem; }
+    .members-list li:last-child { margin-bottom: 0; }
+
+    /* Push-To-Talk Controls */
+    .ptt-btn { height: 100px; border-radius: 12px; font-size: 1rem; margin-bottom: 1rem; -webkit-user-select: none; user-select: none; transition: background 0.1s, transform 0.1s; }
+    .ptt-btn:active, .ptt-btn.active { transform: scale(0.96); background: var(--success); color: #000; box-shadow: 0 0 20px rgba(0, 229, 160, 0.4); border-color: var(--success); }
+    
+    .lock-btn { background: transparent; border-color: var(--border); }
+    .lock-btn.locked { background: var(--danger); border-color: var(--danger); color: white; box-shadow: 0 0 16px rgba(255, 77, 109, 0.4); }
+
+    /* Divider */
+    .divider { display: flex; align-items: center; gap: 0.75rem; font-size: 0.75rem; font-family: 'IBM Plex Mono', monospace; margin-bottom: 1rem; color: var(--muted); }
+    .divider::before, .divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+    /* Waveform Animation */
+    .waveform { display: none; align-items: center; justify-content: center; gap: 3px; height: 24px; margin-bottom: 1rem; }
+    .waveform.active { display: flex; }
+    .waveform span { display: block; width: 3px; border-radius: 3px; background: var(--success); animation: wave 1.2s ease-in-out infinite; }
+    .waveform span:nth-child(1) { height: 6px; animation-delay: 0s; }
+    .waveform span:nth-child(2) { height: 14px; animation-delay: 0.1s; }
+    .waveform span:nth-child(3) { height: 20px; animation-delay: 0.2s; }
+    .waveform span:nth-child(4) { height: 14px; animation-delay: 0.3s; }
+    .waveform span:nth-child(5) { height: 8px; animation-delay: 0.4s; }
+
+    @keyframes wave {
+      0%, 100% { transform: scaleY(0.4); opacity: 0.5; }
+      50% { transform: scaleY(1); opacity: 1; }
+    }
+  </style>
+</head>
+<body>
+
+  <canvas id="bgCanvas"></canvas>
+
+  <div class="app">
+    <div class="header">
+      <div class="logo">
+        <div class="logo-icon">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+            <line x1="12" y1="19" x2="12" y2="23"/>
+            <line x1="8" y1="23" x2="16" y2="23"/>
+          </svg>
+        </div>
+        <h1>FAMILY LINE</h1>
+      </div>
+      <p class="subtitle">always live // always muted // ptt</p>
+    </div>
+
+    <!-- Login Screen -->
+    <div id="loginScreen" class="card">
+      <div class="card-label">Identity</div>
+      <input type="text" id="userNameInput" placeholder="Enter your name (e.g., Mom)">
+      <button class="btn" id="joinBtn">Connect to Network</button>
+    </div>
+
+    <!-- Main Channel Screen -->
+    <div id="channelScreen" style="display: none;">
+      <div class="status-bar" id="statusBar">
+        <div class="status-dot connected"></div>
+        <span id="statusText">Live connection established</span>
+      </div>
+
+      <div class="card">
+        <div class="card-label">Network Status</div>
+        <ul class="members-list" id="membersList">
+          <!-- Active users render here dynamically -->
+        </ul>
+      </div>
+
+      <div class="card" style="text-align: center;">
+        <div class="waveform" id="waveform">
+          <span></span><span></span><span></span><span></span><span></span>
+        </div>
+        <button id="pttBtn" class="btn ptt-btn">PRESS AND HOLD TO SPEAK</button>
+        <div class="divider">or continuous transmission</div>
+        <button id="lockBtn" class="btn lock-btn">MIC LOCK: OFF</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Hidden Audio Container for Mesh Network -->
+  <div id="audioContainer" style="display:none;"></div>
+
+  <script>
+    // Include your original background canvas WebGL script exactly as it was
+    (function () {
+      const canvas = document.getElementById('bgCanvas');
+      const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+      if (!gl) { canvas.style.display = 'none'; return; }
+      const vsSource = `attribute vec2 aPosition; attribute float aSize; attribute float aAlpha; varying float vAlpha; uniform vec2 uResolution; void main() { vec2 clipSpace = (aPosition / uResolution) * 2.0 - 1.0; gl_Position = vec4(clipSpace * vec2(1.0, -1.0), 0.0, 1.0); gl_PointSize = aSize; vAlpha = aAlpha; }`;
+      const fsSource = `precision mediump float; varying float vAlpha; uniform vec3 uColor; void main() { vec2 coord = gl_PointCoord - vec2(0.5); float dist = length(coord); float circle = smoothstep(0.5, 0.0, dist); gl_FragColor = vec4(uColor, vAlpha * circle); }`;
+      const lineVsSource = `attribute vec2 aPosition; attribute float aAlpha; varying float vAlpha; uniform vec2 uResolution; void main() { vec2 clipSpace = (aPosition / uResolution) * 2.0 - 1.0; gl_Position = vec4(clipSpace * vec2(1.0, -1.0), 0.0, 1.0); vAlpha = aAlpha; }`;
+      const lineFsSource = `precision mediump float; varying float vAlpha; uniform vec3 uColor; void main() { gl_FragColor = vec4(uColor, vAlpha); }`;
+      function compileShader(gl, type, source) { const shader = gl.createShader(type); gl.shaderSource(shader, source); gl.compileShader(shader); return gl.getShaderParameter(shader, gl.COMPILE_STATUS) ? shader : null; }
+      function createProgram(gl, vsSource, fsSource) { const vs = compileShader(gl, gl.VERTEX_SHADER, vsSource); const fs = compileShader(gl, gl.FRAGMENT_SHADER, fsSource); const program = gl.createProgram(); gl.attachShader(program, vs); gl.attachShader(program, fs); gl.linkProgram(program); return program; }
+      const pointProgram = createProgram(gl, vsSource, fsSource), lineProgram = createProgram(gl, lineVsSource, lineFsSource);
+      let width, height; function resize() { width = canvas.clientWidth = window.innerWidth; height = canvas.clientHeight = window.innerHeight; canvas.width = width * (window.devicePixelRatio || 1); canvas.height = height * (window.devicePixelRatio || 1); gl.viewport(0, 0, canvas.width, canvas.height); }
+      window.addEventListener('resize', resize); resize();
+      const NODE_COUNT = Math.min(70, Math.floor((window.innerWidth * window.innerHeight) / 14000)), LINK_DIST = 140, nodes = [];
+      for (let i = 0; i < NODE_COUNT; i++) nodes.push({ x: Math.random() * width, y: Math.random() * height, vx: (Math.random() - 0.5) * 0.25, vy: (Math.random() - 0.5) * 0.25, size: 2 + Math.random() * 2.5, alpha: 0.4 + Math.random() * 0.4 });
+      const colorAccent = [179 / 255, 136 / 255, 255 / 255], pointPosBuffer = gl.createBuffer(), pointSizeBuffer = gl.createBuffer(), pointAlphaBuffer = gl.createBuffer(), linePosBuffer = gl.createBuffer(), lineAlphaBuffer = gl.createBuffer();
+      const pointAttribs = { aPosition: gl.getAttribLocation(pointProgram, 'aPosition'), aSize: gl.getAttribLocation(pointProgram, 'aSize'), aAlpha: gl.getAttribLocation(pointProgram, 'aAlpha') }, pointUniforms = { uResolution: gl.getUniformLocation(pointProgram, 'uResolution'), uColor: gl.getUniformLocation(pointProgram, 'uColor') }, lineAttribs = { aPosition: gl.getAttribLocation(lineProgram, 'aPosition'), aAlpha: gl.getAttribLocation(lineProgram, 'aAlpha') }, lineUniforms = { uResolution: gl.getUniformLocation(lineProgram, 'uResolution'), uColor: gl.getUniformLocation(lineProgram, 'uColor') };
+      function update() { for (const n of nodes) { n.x += n.vx; n.y += n.vy; if (n.x < 0 || n.x > width) n.vx *= -1; if (n.y < 0 || n.y > height) n.vy *= -1; n.x = Math.max(0, Math.min(width, n.x)); n.y = Math.max(0, Math.min(height, n.y)); } }
+      function render() { gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT); gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); const linePositions = [], lineAlphas = []; for (let i = 0; i < nodes.length; i++) { for (let j = i + 1; j < nodes.length; j++) { const dx = nodes[i].x - nodes[j].x, dy = nodes[i].y - nodes[j].y, dist = Math.sqrt(dx * dx + dy * dy); if (dist < LINK_DIST) { const a = (1 - dist / LINK_DIST) * 0.25; linePositions.push(nodes[i].x, nodes[i].y, nodes[j].x, nodes[j].y); lineAlphas.push(a, a); } } }
+        if (linePositions.length > 0) { gl.useProgram(lineProgram); gl.uniform2f(lineUniforms.uResolution, width, height); gl.uniform3fv(lineUniforms.uColor, colorAccent); gl.bindBuffer(gl.ARRAY_BUFFER, linePosBuffer); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(linePositions), gl.DYNAMIC_DRAW); gl.enableVertexAttribArray(lineAttribs.aPosition); gl.vertexAttribPointer(lineAttribs.aPosition, 2, gl.FLOAT, false, 0, 0); gl.bindBuffer(gl.ARRAY_BUFFER, lineAlphaBuffer); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(lineAlphas), gl.DYNAMIC_DRAW); gl.enableVertexAttribArray(lineAttribs.aAlpha); gl.vertexAttribPointer(lineAttribs.aAlpha, 1, gl.FLOAT, false, 0, 0); gl.drawArrays(gl.LINES, 0, linePositions.length / 2); }
+        const pointPositions = [], pointSizes = [], pointAlphas = []; for (const n of nodes) { pointPositions.push(n.x, n.y); pointSizes.push(n.size * (window.devicePixelRatio || 1)); pointAlphas.push(n.alpha); }
+        gl.useProgram(pointProgram); gl.uniform2f(pointUniforms.uResolution, width, height); gl.uniform3fv(pointUniforms.uColor, colorAccent); gl.bindBuffer(gl.ARRAY_BUFFER, pointPosBuffer); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(pointPositions), gl.DYNAMIC_DRAW); gl.enableVertexAttribArray(pointAttribs.aPosition); gl.vertexAttribPointer(pointAttribs.aPosition, 2, gl.FLOAT, false, 0, 0); gl.bindBuffer(gl.ARRAY_BUFFER, pointSizeBuffer); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(pointSizes), gl.DYNAMIC_DRAW); gl.enableVertexAttribArray(pointAttribs.aSize); gl.vertexAttribPointer(pointAttribs.aSize, 1, gl.FLOAT, false, 0, 0); gl.bindBuffer(gl.ARRAY_BUFFER, pointAlphaBuffer); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(pointAlphas), gl.DYNAMIC_DRAW); gl.enableVertexAttribArray(pointAttribs.aAlpha); gl.vertexAttribPointer(pointAttribs.aAlpha, 1, gl.FLOAT, false, 0, 0); gl.drawArrays(gl.POINTS, 0, nodes.length); }
+      function loop() { update(); render(); requestAnimationFrame(loop); } loop();
+    })();
+  </script>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
+    import { getFirestore, collection, doc, setDoc, onSnapshot, addDoc, deleteDoc, query, where } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+
+    // Your Firebase Config remains untouched
+    const firebaseConfig = {
+      apiKey: "AIzaSyCX-bZLDHy-6wxuc5b8YInV_Mr7uYOTmgk",
+      authDomain: "trinity-os-8edd0.firebaseapp.com",
+      databaseURL: "https://trinity-os-8edd0-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: "trinity-os-8edd0",
+      storageBucket: "trinity-os-8edd0.firebasestorage.app",
+      messagingSenderId: "692349337854",
+      appId: "1:692349337854:web:ef24ead6e7362a5772a5af"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    const servers = { iceServers: [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }] };
+
+    // Maintain a persistent unique ID for this browser so mesh network handles reconnects properly
+    const myUid = localStorage.getItem('myUid') || Math.random().toString(36).substring(2, 10);
+    localStorage.setItem('myUid', myUid);
+    let myName = localStorage.getItem('myName') || "";
+    
+    // Auto-fill previous name
+    const userNameInput = document.getElementById('userNameInput');
+    if (myName) userNameInput.value = myName;
+
+    let localStream = null;
+    const peers = {}; // Holds peer connections for the mesh network { [uid]: RTCPeerConnection }
+
+    // Audio & PTT State
+    let isMicLocked = false;
+    let isPttActive = false;
+    const waveform = document.getElementById('waveform');
+    const pttBtn = document.getElementById('pttBtn');
+    const lockBtn = document.getElementById('lockBtn');
+
+    // Mutes/Unmutes microphone track without disrupting the WebRTC data flow
+    function updateMicState() {
+      const shouldBeOn = isMicLocked || isPttActive;
+      if (localStream) {
+        localStream.getAudioTracks().forEach(t => t.enabled = shouldBeOn);
+      }
+      
+      // Update User Interface
+      if (shouldBeOn) {
+        waveform.classList.add('active');
+        pttBtn.classList.add('active');
+        pttBtn.textContent = "TRANSMITTING...";
+      } else {
+        waveform.classList.remove('active');
+        pttBtn.classList.remove('active');
+        pttBtn.textContent = "PRESS AND HOLD TO SPEAK";
+      }
+      
+      lockBtn.textContent = isMicLocked ? 'MIC LOCK: ON' : 'MIC LOCK: OFF';
+      lockBtn.className = isMicLocked ? 'btn lock-btn locked' : 'btn lock-btn';
+    }
+
+    // Bind Push-to-Talk Interactions
+    const startPtt = (e) => { e.preventDefault(); if(!isMicLocked) { isPttActive = true; updateMicState(); } };
+    const stopPtt = (e) => { e.preventDefault(); if(!isMicLocked) { isPttActive = false; updateMicState(); } };
+
+    pttBtn.addEventListener('mousedown', startPtt);
+    pttBtn.addEventListener('touchstart', startPtt);
+    window.addEventListener('mouseup', stopPtt);
+    window.addEventListener('touchend', stopPtt);
+
+    // Bind Mic Lock Toggle
+    lockBtn.onclick = () => {
+      isMicLocked = !isMicLocked;
+      updateMicState();
+    };
+
+    // ──────────────────────────────────────────────
+    // MESH NETWORK WEB RTC LOGIC
+    // ──────────────────────────────────────────────
+    
+    // Create a specific 1-to-1 tunnel targeted at another family member
+    function createPeer(targetUid) {
+      const pc = new RTCPeerConnection(servers);
+      if (localStream) {
+        localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+      }
+
+      // Render remote audio elements dynamically per user
+      pc.ontrack = (event) => {
+        let audio = document.getElementById('audio-' + targetUid);
+        if (!audio) {
+          audio = document.createElement('audio');
+          audio.id = 'audio-' + targetUid;
+          audio.autoplay = true;
+          document.getElementById('audioContainer').appendChild(audio);
+        }
+        audio.srcObject = event.streams[0];
+      };
+
+      pc.onicecandidate = (event) => {
+        if (event.candidate) {
+          addDoc(collection(db, 'family_signals'), {
+            sender: myUid, receiver: targetUid, type: 'candidate', payload: JSON.stringify(event.candidate.toJSON())
+          });
+        }
+      };
+
+      // Cleanup if someone disconnects abruptly
+      pc.onconnectionstatechange = () => {
+        if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
+          if (peers[targetUid]) {
+            peers[targetUid].close();
+            delete peers[targetUid];
+          }
+        }
+      };
+
+      peers[targetUid] = pc;
+      return pc;
+    }
+
+    // Acknowledge signals intended specifically for us
+    function listenForSignals() {
+      const q = query(collection(db, 'family_signals'), where('receiver', '==', myUid));
+      onSnapshot(q, (snapshot) => {
+        snapshot.docChanges().forEach(async (change) => {
+          if (change.type === 'added') {
+            const data = change.doc.data();
+            const sender = data.sender;
+            const payload = JSON.parse(data.payload);
+
+            // Housekeeping: immediately clean up the signal queue so it doesn't process again
+            deleteDoc(doc(db, 'family_signals', change.doc.id)).catch(e => {});
+
+            try {
+              if (data.type === 'offer') {
+                const pc = createPeer(sender);
+                await pc.setRemoteDescription(new RTCSessionDescription(payload));
+                const answer = await pc.createAnswer();
+                await pc.setLocalDescription(answer);
+                await addDoc(collection(db, 'family_signals'), {
+                  sender: myUid, receiver: sender, type: 'answer', payload: JSON.stringify(answer)
+                });
+              } else if (data.type === 'answer') {
+                const pc = peers[sender];
+                if (pc) await pc.setRemoteDescription(new RTCSessionDescription(payload));
+              } else if (data.type === 'candidate') {
+                const pc = peers[sender];
+                if (pc) await pc.addIceCandidate(new RTCIceCandidate(payload));
+              }
+            } catch (e) {
+              console.error("Signal handling error", e);
+            }
+          }
+        });
+      });
+    }
+
+    // Monitor Who is Online (Presence) & Trigger Calls
+    function listenForPresence() {
+      const membersList = document.getElementById('membersList');
+      
+      onSnapshot(collection(db, 'family_presence'), (snapshot) => {
+        membersList.innerHTML = '';
+        
+        snapshot.forEach((docSnap) => {
+          const data = docSnap.data();
+          const uid = docSnap.id;
+          
+          // Build UI Status element
+          const li = document.createElement('li');
+          const dot = document.createElement('span');
+          dot.className = `status-dot ${data.online ? 'connected' : 'error'}`;
+          li.appendChild(dot);
+          li.appendChild(document.createTextNode(data.name + (uid === myUid ? " (You)" : "")));
+          membersList.appendChild(li);
+
+          // Mesh Setup Rule: If someone comes online, the person with the "higher" alphabetical UID 
+          // initiates the offer. This perfectly avoids collision where 2 people call each other simultaneously.
+          if (data.online && uid !== myUid && myUid > uid) {
+            if (!peers[uid] || peers[uid].connectionState === 'closed') {
+              initiateCall(uid);
+            }
+          }
+        });
+      });
+    }
+
+    async function initiateCall(targetUid) {
+      const pc = createPeer(targetUid);
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      await addDoc(collection(db, 'family_signals'), {
+        sender: myUid, receiver: targetUid, type: 'offer', payload: JSON.stringify(offer)
+      });
+    }
+
+    // ──────────────────────────────────────────────
+    // BOOTSTRAP CONNECTION
+    // ──────────────────────────────────────────────
+    document.getElementById('joinBtn').onclick = async () => {
+      const name = userNameInput.value.trim();
+      if (!name) return alert("Please establish identity (enter a name).");
+      
+      localStorage.setItem('myName', name);
+      myName = name;
+
+      const btn = document.getElementById('joinBtn');
+      btn.disabled = true;
+      btn.textContent = "Connecting to Network...";
+
+      try {
+        localStream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
+        
+        // Ensure "Always Muted" on joining 
+        localStream.getAudioTracks().forEach(t => t.enabled = false);
+        updateMicState();
+        
+        // Log Presence State to Firebase
+        await setDoc(doc(db, 'family_presence', myUid), {
+          name: myName,
+          online: true,
+          lastSeen: Date.now()
+        });
+
+        listenForSignals();
+        listenForPresence();
+
+        // Handle offline status if they close the browser tab
+        window.addEventListener('beforeunload', () => {
+          setDoc(doc(db, 'family_presence', myUid), { name: myName, online: false }, { merge: true });
+        });
+
+        // Swap Screens
+        document.getElementById('loginScreen').style.display = 'none';
+        document.getElementById('channelScreen').style.display = 'flex';
+        document.getElementById('channelScreen').style.flexDirection = 'column';
+        document.getElementById('channelScreen').style.gap = '1rem';
+
+      } catch (e) {
+        console.error(e);
+        alert("Microphone access is required.");
+        btn.disabled = false;
+        btn.textContent = "Connect to Network";
+      }
+    };
+  </script>
+</body>
+</html>

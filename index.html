@@ -82,6 +82,8 @@
     .status-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
     .status-dot.connected { background: var(--success); box-shadow: 0 0 8px var(--success); }
     .status-dot.error { background: var(--danger); box-shadow: 0 0 8px var(--danger); }
+        .status-dot.speaking { animation: pulseSpeak 0.8s ease-in-out infinite; }
+        @keyframes pulseSpeak { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
     
     /* Inputs & Buttons */
     input[type="text"] { width: 100%; background: #0f0420; border: 1px solid var(--border); border-radius: 6px; padding: 0.8rem 1rem; font-family: 'IBM Plex Mono', monospace; font-size: 0.9rem; color: var(--text); outline: none; margin-bottom: 1rem; }
@@ -95,6 +97,16 @@
     .members-list { list-style: none; padding: 0; margin: 0; }
     .members-list li { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; font-family: 'IBM Plex Mono', monospace; font-size: 0.9rem; }
     .members-list li:last-child { margin-bottom: 0; }
+        .members-list li { justify-content: space-between; }
+        .member-name { display: flex; align-items: center; gap: 10px; }
+        .buzz-member-btn { background: transparent; border: 1px solid var(--warning); color: var(--warning); border-radius: 6px; padding: 0.3rem 0.6rem; font-family: 'IBM Plex Mono', monospace; font-size: 0.7rem; font-weight: 600; cursor: pointer; letter-spacing: 0.03em; width: auto; transition: all 0.15s ease; }
+        .buzz-member-btn:hover:not(:disabled) { background: rgba(255,209,102,0.15); box-shadow: 0 0 10px rgba(255,209,102,0.35); }
+        .buzz-member-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        .buzz-all-btn { background: var(--accent-dim); border: 1px solid var(--warning); color: var(--warning); margin-top: 0.75rem; }
+        body.incoming-buzz { animation: buzzFlash 0.5s ease-in-out 6; }
+        @keyframes buzzFlash { 0%, 100% { background: var(--bg); } 50% { background: rgba(255,209,102,0.25); } }
+        .buzz-toast { position: fixed; top: 1rem; left: 50%; transform: translateX(-50%); z-index: 50; background: var(--surface); border: 1px solid var(--warning); border-radius: 8px; padding: 0.7rem 1.2rem; font-family: 'IBM Plex Mono', monospace; font-size: 0.85rem; box-shadow: 0 0 20px rgba(255,209,102,0.4); display: none; align-items: center; gap: 0.5rem; }
+        .buzz-toast.show { display: flex; }
 
     /* Push-To-Talk Controls */
     .ptt-btn { height: 100px; border-radius: 12px; font-size: 1rem; margin-bottom: 1rem; -webkit-user-select: none; user-select: none; transition: background 0.1s, transform 0.1s; }
@@ -158,11 +170,12 @@
       </div>
 
       <div class="card">
-        <div class="card-label">Network Status</div>
-        <ul class="members-list" id="membersList">
-          <!-- Active users render here dynamically -->
-        </ul>
-      </div>
+              <div class="card-label">Network Status</div>
+              <ul class="members-list" id="membersList">
+                <!-- Active users render here dynamically -->
+              </ul>
+              <button id="buzzAllBtn" class="btn buzz-all-btn">BUZZ EVERYONE</button>
+            </div>
 
       <div class="card" style="text-align: center;">
         <div class="waveform" id="waveform">
@@ -176,7 +189,12 @@
   </div>
 
   <!-- Hidden Audio Container for Mesh Network -->
-  <div id="audioContainer" style="display:none;"></div>
+    <div id="audioContainer" style="display:none;"></div>
+  
+    <!-- Incoming Buzz Toast -->
+    <div id="buzzToast" class="buzz-toast">
+      <span id="buzzToastText">Buzz</span>
+    </div>
 
   <script>
     // Include your original background canvas WebGL script exactly as it was
@@ -239,33 +257,38 @@
     const peers = {}; // Holds peer connections for the mesh network { [uid]: RTCPeerConnection }
 
     // Audio & PTT State
-    let isMicLocked = false;
-    let isPttActive = false;
+        let isMicLocked = false;
+        let isPttActive = false;
+        let hasJoined = false;
     const waveform = document.getElementById('waveform');
     const pttBtn = document.getElementById('pttBtn');
     const lockBtn = document.getElementById('lockBtn');
 
     // Mutes/Unmutes microphone track without disrupting the WebRTC data flow
     function updateMicState() {
-      const shouldBeOn = isMicLocked || isPttActive;
-      if (localStream) {
-        localStream.getAudioTracks().forEach(t => t.enabled = shouldBeOn);
-      }
-      
-      // Update User Interface
-      if (shouldBeOn) {
-        waveform.classList.add('active');
-        pttBtn.classList.add('active');
-        pttBtn.textContent = "TRANSMITTING...";
-      } else {
-        waveform.classList.remove('active');
-        pttBtn.classList.remove('active');
-        pttBtn.textContent = "PRESS AND HOLD TO SPEAK";
-      }
-      
-      lockBtn.textContent = isMicLocked ? 'MIC LOCK: ON' : 'MIC LOCK: OFF';
-      lockBtn.className = isMicLocked ? 'btn lock-btn locked' : 'btn lock-btn';
-    }
+          const shouldBeOn = isMicLocked || isPttActive;
+          if (localStream) {
+            localStream.getAudioTracks().forEach(t => t.enabled = shouldBeOn);
+          }
+          
+          // Update User Interface
+          if (shouldBeOn) {
+            waveform.classList.add('active');
+            pttBtn.classList.add('active');
+            pttBtn.textContent = "TRANSMITTING...";
+          } else {
+            waveform.classList.remove('active');
+            pttBtn.classList.remove('active');
+            pttBtn.textContent = "PRESS AND HOLD TO SPEAK";
+          }
+          
+          lockBtn.textContent = isMicLocked ? 'MIC LOCK: ON' : 'MIC LOCK: OFF';
+          lockBtn.className = isMicLocked ? 'btn lock-btn locked' : 'btn lock-btn';
+    
+          if (hasJoined) {
+            setDoc(doc(db, 'family_presence', myUid), { speaking: shouldBeOn }, { merge: true }).catch(() => {});
+          }
+        }
 
     // Bind Push-to-Talk Interactions
     const startPtt = (e) => { e.preventDefault(); if(!isMicLocked) { isPttActive = true; updateMicState(); } };
@@ -277,14 +300,104 @@
     window.addEventListener('touchend', stopPtt);
 
     // Bind Mic Lock Toggle
-    lockBtn.onclick = () => {
-      isMicLocked = !isMicLocked;
-      updateMicState();
-    };
-
-    // ──────────────────────────────────────────────
-    // MESH NETWORK WEB RTC LOGIC
-    // ──────────────────────────────────────────────
+        lockBtn.onclick = () => {
+          isMicLocked = !isMicLocked;
+          updateMicState();
+        };
+    
+        // ──────────────────────────────────────────────
+        // BUZZER (WAKE-UP ALERT) LOGIC
+        // ──────────────────────────────────────────────
+        const buzzCooldowns = {};
+        const BUZZ_COOLDOWN_MS = 4000;
+        let audioCtx = null;
+    
+        if ('Notification' in window && Notification.permission === 'default') {
+          Notification.requestPermission().catch(() => {});
+        }
+    
+        function playBuzzTone() {
+          try {
+            audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+            const now = audioCtx.currentTime;
+            for (let i = 0; i < 3; i++) {
+              const osc = audioCtx.createOscillator();
+              const gain = audioCtx.createGain();
+              osc.type = 'square';
+              osc.frequency.value = 880;
+              gain.gain.setValueAtTime(0.0001, now + i * 0.35);
+              gain.gain.exponentialRampToValueAtTime(0.3, now + i * 0.35 + 0.02);
+              gain.gain.exponentialRampToValueAtTime(0.0001, now + i * 0.35 + 0.25);
+              osc.connect(gain);
+              gain.connect(audioCtx.destination);
+              osc.start(now + i * 0.35);
+              osc.stop(now + i * 0.35 + 0.3);
+            }
+          } catch (e) {}
+        }
+    
+        function showBuzzToast(text) {
+          const toast = document.getElementById('buzzToast');
+          const toastText = document.getElementById('buzzToastText');
+          toastText.textContent = text;
+          toast.classList.add('show');
+          clearTimeout(showBuzzToast._t);
+          showBuzzToast._t = setTimeout(() => toast.classList.remove('show'), 4000);
+        }
+    
+        function triggerIncomingBuzz(fromName) {
+          playBuzzTone();
+          if (navigator.vibrate) navigator.vibrate([300, 150, 300, 150, 300]);
+          showBuzzToast(fromName + ' is buzzing you!');
+          document.body.classList.add('incoming-buzz');
+          setTimeout(() => document.body.classList.remove('incoming-buzz'), 3200);
+          if ('Notification' in window && Notification.permission === 'granted' && document.hidden) {
+            new Notification('Family Line', { body: fromName + ' is buzzing you!' });
+          }
+        }
+    
+        async function sendBuzz(targetUid, btnEl) {
+          const now = Date.now();
+          if (buzzCooldowns[targetUid] && now < buzzCooldowns[targetUid]) return;
+          buzzCooldowns[targetUid] = now + BUZZ_COOLDOWN_MS;
+          const originalText = btnEl ? btnEl.textContent : null;
+          if (btnEl) { btnEl.disabled = true; btnEl.textContent = 'BUZZED'; }
+          try {
+            await addDoc(collection(db, 'family_buzz'), {
+              sender: myUid, senderName: myName, receiver: targetUid, timestamp: now
+            });
+          } catch (e) { console.error('Buzz send error', e); }
+          if (btnEl) {
+            setTimeout(() => { btnEl.disabled = false; btnEl.textContent = originalText; }, BUZZ_COOLDOWN_MS);
+          }
+        }
+    
+        function handleBuzzDoc(docSnap) {
+          const data = docSnap.data();
+          if (data.sender !== myUid) {
+            triggerIncomingBuzz(data.senderName || 'Someone');
+          }
+          deleteDoc(doc(db, 'family_buzz', docSnap.id)).catch(() => {});
+        }
+    
+        function listenForBuzzes() {
+          const qMine = query(collection(db, 'family_buzz'), where('receiver', '==', myUid));
+          onSnapshot(qMine, (snapshot) => {
+            snapshot.docChanges().forEach((change) => { if (change.type === 'added') handleBuzzDoc(change.doc); });
+          });
+    
+          const qAll = query(collection(db, 'family_buzz'), where('receiver', '==', 'all'));
+          onSnapshot(qAll, (snapshot) => {
+            snapshot.docChanges().forEach((change) => { if (change.type === 'added') handleBuzzDoc(change.doc); });
+          });
+        }
+    
+        const buzzAllBtnEl = document.getElementById('buzzAllBtn');
+        buzzAllBtnEl.onclick = () => sendBuzz('all', buzzAllBtnEl);
+    
+        // ──────────────────────────────────────────────
+        // MESH NETWORK WEB RTC LOGIC
+        // ──────────────────────────────────────────────
     
     // Create a specific 1-to-1 tunnel targeted at another family member
     function createPeer(targetUid) {
@@ -377,11 +490,34 @@
           
           // Build UI Status element
           const li = document.createElement('li');
-          const dot = document.createElement('span');
-          dot.className = `status-dot ${data.online ? 'connected' : 'error'}`;
-          li.appendChild(dot);
-          li.appendChild(document.createTextNode(data.name + (uid === myUid ? " (You)" : "")));
-          membersList.appendChild(li);
+          
+                    const nameWrap = document.createElement('div');
+                    nameWrap.className = 'member-name';
+          
+                    const dot = document.createElement('span');
+                    dot.className = 'status-dot ' + (data.online ? 'connected' : 'error') + (data.speaking ? ' speaking' : '');
+                    nameWrap.appendChild(dot);
+          
+                    const label = data.name + (uid === myUid ? ' (You)' : '') + (data.speaking ? ' \uD83D\uDD0A' : '');
+                    nameWrap.appendChild(document.createTextNode(label));
+                    li.appendChild(nameWrap);
+          
+                    if (uid !== myUid) {
+                      const buzzBtn = document.createElement('button');
+                      buzzBtn.className = 'buzz-member-btn';
+                      buzzBtn.textContent = 'BUZZ';
+                      const cooldownEnd = buzzCooldowns[uid];
+                      if (cooldownEnd && Date.now() < cooldownEnd) {
+                        buzzBtn.disabled = true;
+                        buzzBtn.textContent = 'BUZZED';
+                      } else {
+                        buzzBtn.disabled = !data.online;
+                      }
+                      buzzBtn.onclick = () => sendBuzz(uid, buzzBtn);
+                      li.appendChild(buzzBtn);
+                    }
+          
+                    membersList.appendChild(li);
 
           // Mesh Setup Rule: If someone comes online, the person with the "higher" alphabetical UID 
           // initiates the offer. This perfectly avoids collision where 2 people call each other simultaneously.
@@ -418,26 +554,30 @@
       btn.textContent = "Connecting to Network...";
 
       try {
-        localStream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
+              try { audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {}
+              localStream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
         
         // Ensure "Always Muted" on joining 
         localStream.getAudioTracks().forEach(t => t.enabled = false);
         updateMicState();
         
         // Log Presence State to Firebase
-        await setDoc(doc(db, 'family_presence', myUid), {
-          name: myName,
-          online: true,
-          lastSeen: Date.now()
-        });
-
-        listenForSignals();
-        listenForPresence();
+                await setDoc(doc(db, 'family_presence', myUid), {
+                  name: myName,
+                  online: true,
+                  speaking: false,
+                  lastSeen: Date.now()
+                });
+                hasJoined = true;
+        
+                listenForSignals();
+                listenForPresence();
+                listenForBuzzes();
 
         // Handle offline status if they close the browser tab
         window.addEventListener('beforeunload', () => {
-          setDoc(doc(db, 'family_presence', myUid), { name: myName, online: false }, { merge: true });
-        });
+                  setDoc(doc(db, 'family_presence', myUid), { name: myName, online: false, speaking: false }, { merge: true });
+                });
 
         // Swap Screens
         document.getElementById('loginScreen').style.display = 'none';

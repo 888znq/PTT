@@ -241,10 +241,14 @@
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
-    // --- We will update this line AFTER you build the Glitch app ---
-    const GLITCH_WORKER_URL = "https://YOUR-GLITCH-PROJECT.glitch.me"; 
+    // --- YOUR BACKEND CONNECTION ---
+    // PASTE YOUR LIVE RENDER URL HERE ONCE IT IS DEPLOYED
+    const GLITCH_WORKER_URL = "https://your-new-render-app-name.onrender.com"; 
     
+    // THE PUBLIC KEY (Must match the backend exactly)
     const VAPID_PUBLIC_KEY = "BCPTdBcEXkGuQTtLehEmXp7KkN5jqhAyp4VbL7GZn1ixXAyt_AOXq6qAzzSJO8BM47YnfdGmLc990m0P3ER_2RA";
+
+    // ... (rest of the code remains exactly the same) ...
 
     function urlBase64ToUint8Array(base64String) {
       const padding = '='.repeat((4 - base64String.length % 4) % 4);

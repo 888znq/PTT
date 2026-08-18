@@ -241,10 +241,9 @@
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
-    // --- PASTE YOUR GLITCH LIVE URL HERE ---
+    // --- We will update this line AFTER you build the Glitch app ---
     const GLITCH_WORKER_URL = "https://YOUR-GLITCH-PROJECT.glitch.me"; 
     
-    // Your VAPID Public Key
     const VAPID_PUBLIC_KEY = "BCPTdBcEXkGuQTtLehEmXp7KkN5jqhAyp4VbL7GZn1ixXAyt_AOXq6qAzzSJO8BM47YnfdGmLc990m0P3ER_2RA";
 
     function urlBase64ToUint8Array(base64String) {
@@ -620,7 +619,7 @@
 
     async function subscribeToPush() {
       if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
-      if (!GLITCH_WORKER_URL || !VAPID_PUBLIC_KEY) return;
+      if (!GLITCH_WORKER_URL || !VAPID_PUBLIC_KEY || GLITCH_WORKER_URL.includes('YOUR-GLITCH-PROJECT')) return;
       
       try {
         const permission = await Notification.requestPermission();
@@ -645,7 +644,7 @@
     }
 
     async function relayPushBuzz(targetUid) {
-      if (!GLITCH_WORKER_URL || !VAPID_PUBLIC_KEY) return;
+      if (!GLITCH_WORKER_URL || !VAPID_PUBLIC_KEY || GLITCH_WORKER_URL.includes('YOUR-GLITCH-PROJECT')) return;
       try {
         let targetDocs = [];
         

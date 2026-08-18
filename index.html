@@ -66,7 +66,6 @@
       gap: 1rem;
     }
 
-    /* Header */
     .header { text-align: center; padding: 1.5rem 0 0.5rem; }
     .logo { display: flex; align-items: center; justify-content: center; gap: 0.6rem; margin-bottom: 0.4rem; }
     .logo-icon { width: 32px; height: 32px; background: var(--accent-dim); border: 1px solid var(--accent); border-radius: 8px; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 12px var(--accent-glow); }
@@ -74,7 +73,6 @@
     h1 { font-family: 'IBM Plex Mono', monospace; font-size: 1.2rem; font-weight: 600; letter-spacing: 0.05em; }
     .subtitle { font-size: 0.8rem; color: var(--muted); font-family: 'IBM Plex Mono', monospace; }
 
-    /* Cards & Status */
     .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 1.25rem; transition: border-color 0.3s; }
     .card-label { font-family: 'IBM Plex Mono', monospace; font-size: 0.7rem; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 0.9rem; display: flex; align-items: center; gap: 0.5rem; }
     .card-label::before { content: ''; display: inline-block; width: 3px; height: 12px; background: var(--accent); border-radius: 2px; }
@@ -86,7 +84,6 @@
     .status-dot.speaking { animation: pulseSpeak 0.8s ease-in-out infinite; }
     @keyframes pulseSpeak { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
     
-    /* Inputs & Buttons */
     input[type="text"] { width: 100%; background: #0f0420; border: 1px solid var(--border); border-radius: 6px; padding: 0.8rem 1rem; font-family: 'IBM Plex Mono', monospace; font-size: 0.9rem; color: var(--text); outline: none; margin-bottom: 1rem; transition: border-color 0.2s; }
     input[type="text"]:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-dim); }
 
@@ -94,13 +91,11 @@
     .btn:hover:not(:disabled) { background: rgba(179,136,255,0.2); box-shadow: 0 0 16px var(--accent-glow); }
     .btn:disabled { background: rgba(255,255,255,0.04); color: var(--muted); border-color: var(--border); cursor: not-allowed; box-shadow: none; }
 
-    /* Presence List */
     .members-list { list-style: none; padding: 0; margin: 0; }
     .members-list li { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; font-family: 'IBM Plex Mono', monospace; font-size: 0.9rem; }
     .members-list li:last-child { margin-bottom: 0; }
     .member-name { display: flex; align-items: center; gap: 10px; }
     
-    /* Buzz Buttons */
     .buzz-member-btn { background: transparent; border: 1px solid var(--warning); color: var(--warning); border-radius: 6px; padding: 0.3rem 0.6rem; font-family: 'IBM Plex Mono', monospace; font-size: 0.7rem; font-weight: 600; cursor: pointer; letter-spacing: 0.03em; width: auto; transition: all 0.15s ease; }
     .buzz-member-btn:hover:not(:disabled) { background: rgba(255,209,102,0.15); box-shadow: 0 0 10px rgba(255,209,102,0.35); }
     .buzz-member-btn:disabled { opacity: 0.4; cursor: not-allowed; }
@@ -112,18 +107,15 @@
     .buzz-toast { position: fixed; top: 1rem; left: 50%; transform: translateX(-50%); z-index: 50; background: var(--surface); border: 1px solid var(--warning); border-radius: 8px; padding: 0.7rem 1.2rem; font-family: 'IBM Plex Mono', monospace; font-size: 0.85rem; box-shadow: 0 0 20px rgba(255,209,102,0.4); display: none; align-items: center; gap: 0.5rem; }
     .buzz-toast.show { display: flex; }
 
-    /* Push-To-Talk Controls */
     .ptt-btn { height: 100px; border-radius: 12px; font-size: 1rem; margin-bottom: 1rem; -webkit-user-select: none; user-select: none; transition: background 0.1s, transform 0.1s; touch-action: none; }
     .ptt-btn:active, .ptt-btn.active { transform: scale(0.96); background: var(--success); color: #000; box-shadow: 0 0 20px rgba(0, 229, 160, 0.4); border-color: var(--success); }
     
     .lock-btn { background: transparent; border-color: var(--border); }
     .lock-btn.locked { background: var(--danger); border-color: var(--danger); color: white; box-shadow: 0 0 16px rgba(255, 77, 109, 0.4); }
 
-    /* Divider */
     .divider { display: flex; align-items: center; gap: 0.75rem; font-size: 0.75rem; font-family: 'IBM Plex Mono', monospace; margin-bottom: 1rem; color: var(--muted); }
     .divider::before, .divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
 
-    /* Waveform Animation */
     .waveform { display: none; align-items: center; justify-content: center; gap: 3px; height: 24px; margin-bottom: 1rem; }
     .waveform.active { display: flex; }
     .waveform span { display: block; width: 3px; border-radius: 3px; background: var(--success); animation: wave 1.2s ease-in-out infinite; }
@@ -141,10 +133,8 @@
 </head>
 <body>
 
-  <!-- Background Canvas -->
   <canvas id="bgCanvas"></canvas>
 
-  <!-- Main App Container -->
   <div class="app">
     <div class="header">
       <div class="logo">
@@ -161,32 +151,26 @@
       <p class="subtitle">always live // always muted // ptt</p>
     </div>
 
-    <!-- 1. Login Screen -->
+    <!-- Login Screen -->
     <div id="loginScreen" class="card">
       <div class="card-label">Identity</div>
       <input type="text" id="userNameInput" placeholder="Enter your name (e.g., Mom)">
       <button class="btn" id="joinBtn">Connect to Network</button>
     </div>
 
-    <!-- 2. Main Channel Screen (Hidden until connected) -->
+    <!-- Main Channel Screen -->
     <div id="channelScreen" style="display: none; flex-direction: column; gap: 1rem;">
-      
-      <!-- Status -->
       <div class="status-bar" id="statusBar">
         <div class="status-dot connected"></div>
         <span id="statusText">Live connection established</span>
       </div>
 
-      <!-- Network Roster -->
       <div class="card">
         <div class="card-label">Network Status</div>
-        <ul class="members-list" id="membersList">
-          <!-- Active users render here dynamically -->
-        </ul>
+        <ul class="members-list" id="membersList"></ul>
         <button id="buzzAllBtn" class="btn buzz-all-btn">BUZZ EVERYONE</button>
       </div>
 
-      <!-- Push To Talk Controls -->
       <div class="card" style="text-align: center;">
         <div class="waveform" id="waveform">
           <span></span><span></span><span></span><span></span><span></span>
@@ -196,7 +180,6 @@
         <button id="lockBtn" class="btn lock-btn">MIC LOCK: OFF</button>
       </div>
       
-      <!-- Text Chat -->
       <div class="card" id="chatCard">
         <div class="card-label">Text Chat</div>
         <div id="chatMessages" style="max-height:180px; overflow-y:auto; margin-bottom:0.75rem; font-family:'IBM Plex Mono', monospace; font-size:0.8rem; display:flex; flex-direction:column; gap:0.4rem; padding-right: 5px;"></div>
@@ -205,19 +188,15 @@
           <button id="chatSendBtn" class="btn" style="width:auto; padding:0.8rem 1.2rem;">SEND</button>
         </div>
       </div>
-
     </div>
   </div>
 
-  <!-- Hidden Audio Elements for WebRTC Streams -->
   <div id="audioContainer" style="display:none;"></div>
   
-  <!-- Incoming Buzz Notification Toast -->
   <div id="buzzToast" class="buzz-toast">
     <span id="buzzToastText">Buzz</span>
   </div>
 
-  <!-- Script 1: WebGL Animated Background -->
   <script>
     (function () {
       const canvas = document.getElementById('bgCanvas');
@@ -245,12 +224,10 @@
     })();
   </script>
 
-  <!-- Script 2: Main Application Logic -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
-    import { getFirestore, collection, doc, setDoc, onSnapshot, addDoc, deleteDoc, query, where, orderBy, limit } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+    import { getFirestore, collection, doc, setDoc, onSnapshot, addDoc, deleteDoc, query, where, orderBy, limit, getDoc, getDocs } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
 
-    // --- Firebase Configuration ---
     const firebaseConfig = {
       apiKey: "AIzaSyCX-bZLDHy-6wxuc5b8YInV_Mr7uYOTmgk",
       authDomain: "trinity-os-8edd0.firebaseapp.com",
@@ -264,10 +241,11 @@
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
-    // --- Push Notifications Config ---
-    // (Optional: Fill these in if you later deploy a push worker)
-    const CLOUDFLARE_WORKER_URL = ""; 
-    const VAPID_PUBLIC_KEY = "";
+    // --- PASTE YOUR GLITCH LIVE URL HERE ---
+    const GLITCH_WORKER_URL = "https://YOUR-GLITCH-PROJECT.glitch.me"; 
+    
+    // Your VAPID Public Key
+    const VAPID_PUBLIC_KEY = "BCPTdBcEXkGuQTtLehEmXp7KkN5jqhAyp4VbL7GZn1ixXAyt_AOXq6qAzzSJO8BM47YnfdGmLc990m0P3ER_2RA";
 
     function urlBase64ToUint8Array(base64String) {
       const padding = '='.repeat((4 - base64String.length % 4) % 4);
@@ -278,14 +256,12 @@
       return outputArray;
     }
 
-    // Attempt to register service worker if one exists (safe to fail if standalone)
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('./sw.js').catch(() => console.log('Running in standalone mode (no background push sw.js found). In-app features will still work!'));
+      navigator.serviceWorker.register('./sw.js').catch((e) => console.log('SW Registration failed', e));
     }
 
     const servers = { iceServers: [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }] };
 
-    // --- Identity & State ---
     const myUid = localStorage.getItem('myUid') || Math.random().toString(36).substring(2, 10);
     localStorage.setItem('myUid', myUid);
     let myName = localStorage.getItem('myName') || "";
@@ -302,19 +278,16 @@
     let hasJoined = false;
     let hasMic = false;
     
-    // UI Elements
     const waveform = document.getElementById('waveform');
     const pttBtn = document.getElementById('pttBtn');
     const lockBtn = document.getElementById('lockBtn');
 
-    // --- Audio Control ---
     function updateMicState() {
       const shouldBeOn = isMicLocked || isPttActive;
       if (localStream) {
         localStream.getAudioTracks().forEach(t => t.enabled = shouldBeOn);
       }
       
-      // Update Button visuals
       if (shouldBeOn) {
         waveform.classList.add('active');
         pttBtn.classList.add('active');
@@ -328,42 +301,37 @@
       lockBtn.textContent = isMicLocked ? 'MIC LOCK: ON' : 'MIC LOCK: OFF';
       lockBtn.className = isMicLocked ? 'btn lock-btn locked' : 'btn lock-btn';
 
-      // Tell others we are speaking
       if (hasJoined) {
         setDoc(doc(db, 'family_presence', myUid), { speaking: shouldBeOn }, { merge: true }).catch(() => {});
       }
     }
 
-    // Push To Talk Bindings
-const startPtt = (e) => { 
-  e.preventDefault(); // Good here: Prevents text selection/zooming when holding the button
-  if(hasMic && !isMicLocked) { 
-    isPttActive = true; 
-    updateMicState(); 
-  } 
-};
+    const startPtt = (e) => { 
+      e.preventDefault(); 
+      if(hasMic && !isMicLocked) { 
+        isPttActive = true; 
+        updateMicState(); 
+      } 
+    };
 
-const stopPtt = (e) => { 
-  // REMOVED e.preventDefault() - It was blocking mobile taps globally!
-  if(hasMic && !isMicLocked && isPttActive) { 
-    isPttActive = false; 
-    updateMicState(); 
-  } 
-};
+    const stopPtt = (e) => { 
+      if(hasMic && !isMicLocked && isPttActive) { 
+        isPttActive = false; 
+        updateMicState(); 
+      } 
+    };
 
-pttBtn.addEventListener('mousedown', startPtt);
-pttBtn.addEventListener('touchstart', startPtt, { passive: false });
-window.addEventListener('mouseup', stopPtt);
-window.addEventListener('touchend', stopPtt);
+    pttBtn.addEventListener('mousedown', startPtt);
+    pttBtn.addEventListener('touchstart', startPtt, { passive: false });
+    window.addEventListener('mouseup', stopPtt);
+    window.addEventListener('touchend', stopPtt);
 
-    // Lock Bindings
     lockBtn.onclick = () => {
       if (!hasMic) return;
       isMicLocked = !isMicLocked;
       updateMicState();
     };
 
-    // --- Buzzer System ---
     const buzzCooldowns = {};
     const BUZZ_COOLDOWN_MS = 4000;
     let audioCtx = null;
@@ -443,13 +411,11 @@ window.addEventListener('touchend', stopPtt);
     }
 
     function listenForBuzzes() {
-      // Listen for direct buzzes
       const qMine = query(collection(db, 'family_buzz'), where('receiver', '==', myUid));
       onSnapshot(qMine, (snapshot) => {
         snapshot.docChanges().forEach((change) => { if (change.type === 'added') handleBuzzDoc(change.doc); });
       });
 
-      // Listen for global buzzes
       const qAll = query(collection(db, 'family_buzz'), where('receiver', '==', 'all'));
       onSnapshot(qAll, (snapshot) => {
         snapshot.docChanges().forEach((change) => { if (change.type === 'added') handleBuzzDoc(change.doc); });
@@ -459,7 +425,6 @@ window.addEventListener('touchend', stopPtt);
     const buzzAllBtnEl = document.getElementById('buzzAllBtn');
     buzzAllBtnEl.onclick = () => sendBuzz('all', buzzAllBtnEl);
 
-    // --- Text Chat System ---
     const chatMessagesEl = document.getElementById('chatMessages');
     const chatInputEl = document.getElementById('chatInput');
     const chatSendBtnEl = document.getElementById('chatSendBtn');
@@ -501,7 +466,6 @@ window.addEventListener('touchend', stopPtt);
       });
     }
 
-    // --- WebRTC Mesh Network ---
     function createPeer(targetUid) {
       const pc = new RTCPeerConnection(servers);
       candidateQueues[targetUid] = [];
@@ -558,7 +522,6 @@ window.addEventListener('touchend', stopPtt);
             const sender = data.sender;
             const payload = JSON.parse(data.payload);
 
-            // Clean up processed signal
             deleteDoc(doc(db, 'family_signals', change.doc.id)).catch(() => {});
 
             try {
@@ -597,7 +560,6 @@ window.addEventListener('touchend', stopPtt);
       });
     }
 
-    // --- Presence Monitoring ---
     function listenForPresence() {
       const membersList = document.getElementById('membersList');
       
@@ -608,7 +570,6 @@ window.addEventListener('touchend', stopPtt);
           const data = docSnap.data();
           const uid = docSnap.id;
           
-          // Build Roster Item
           const li = document.createElement('li');
           const nameWrap = document.createElement('div');
           nameWrap.className = 'member-name';
@@ -621,7 +582,6 @@ window.addEventListener('touchend', stopPtt);
           nameWrap.appendChild(document.createTextNode(label));
           li.appendChild(nameWrap);
           
-          // Add Buzz Button for remote users
           if (uid !== myUid) {
             const buzzBtn = document.createElement('button');
             buzzBtn.className = 'buzz-member-btn';
@@ -640,8 +600,6 @@ window.addEventListener('touchend', stopPtt);
           
           membersList.appendChild(li);
 
-          // Mesh Call Initiation Rule
-          // The person with the higher UID initiates to avoid cross-offers
           if (data.online && uid !== myUid && myUid > uid) {
             if (!peers[uid] || peers[uid].connectionState === 'closed') {
               initiateCall(uid);
@@ -660,10 +618,9 @@ window.addEventListener('touchend', stopPtt);
       });
     }
 
-    // --- Background Push Registration (Optional) ---
     async function subscribeToPush() {
       if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
-      if (!CLOUDFLARE_WORKER_URL || !VAPID_PUBLIC_KEY) return;
+      if (!GLITCH_WORKER_URL || !VAPID_PUBLIC_KEY) return;
       
       try {
         const permission = await Notification.requestPermission();
@@ -683,24 +640,37 @@ window.addEventListener('touchend', stopPtt);
           updatedAt: Date.now()
         });
       } catch (e) {
-        console.warn('Push subscription failed (Safe to ignore if standalone)', e);
+        console.warn('Push subscription failed', e);
       }
     }
 
     async function relayPushBuzz(targetUid) {
-      if (!CLOUDFLARE_WORKER_URL) return;
+      if (!GLITCH_WORKER_URL || !VAPID_PUBLIC_KEY) return;
       try {
-        await fetch(CLOUDFLARE_WORKER_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ receiverUid: targetUid, senderName: myName, senderUid: myUid })
-        });
+        let targetDocs = [];
+        
+        if (targetUid === 'all') {
+          const q = query(collection(db, 'family_push_subscriptions'));
+          const snap = await getDocs(q);
+          snap.forEach(d => { if (d.id !== myUid) targetDocs.push(d.data().subscription) });
+        } else {
+          const docSnap = await getDoc(doc(db, 'family_push_subscriptions', targetUid));
+          if (docSnap.exists()) targetDocs.push(docSnap.data().subscription);
+        }
+
+        for (const subStr of targetDocs) {
+          const subObj = JSON.parse(subStr);
+          await fetch(GLITCH_WORKER_URL + '/buzz', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ subscription: subObj, senderName: myName })
+          });
+        }
       } catch (e) {
         console.warn('Push relay failed', e);
       }
     }
 
-    // --- Application Bootstrap ---
     document.getElementById('joinBtn').onclick = async () => {
       const name = userNameInput.value.trim();
       if (!name) return alert("Please enter a name.");
@@ -712,13 +682,11 @@ window.addEventListener('touchend', stopPtt);
       btn.disabled = true;
       btn.textContent = "Connecting to Network...";
 
-      // Initialize Audio Context on user interaction
       try { audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {}
 
-      // Get Microphone Access
       try {
         localStream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
-        localStream.getAudioTracks().forEach(t => t.enabled = false); // Start Muted
+        localStream.getAudioTracks().forEach(t => t.enabled = false);
         hasMic = true;
       } catch (e) {
         console.warn('Mic unavailable, joining in listen/chat-only mode', e);
@@ -735,7 +703,6 @@ window.addEventListener('touchend', stopPtt);
       }
 
       try {
-        // Register Presence
         await setDoc(doc(db, 'family_presence', myUid), {
           name: myName,
           online: true,
@@ -747,18 +714,15 @@ window.addEventListener('touchend', stopPtt);
         
         subscribeToPush();
 
-        // Boot network listeners
         listenForSignals();
         listenForPresence();
         listenForBuzzes();
         listenForChat();
 
-        // Graceful disconnect on close
         window.addEventListener('beforeunload', () => {
           setDoc(doc(db, 'family_presence', myUid), { name: myName, online: false, speaking: false }, { merge: true });
         });
 
-        // Transition UI
         document.getElementById('loginScreen').style.display = 'none';
         document.getElementById('channelScreen').style.display = 'flex';
         

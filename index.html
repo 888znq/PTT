@@ -335,13 +335,26 @@
     }
 
     // Push To Talk Bindings
-    const startPtt = (e) => { e.preventDefault(); if(hasMic && !isMicLocked) { isPttActive = true; updateMicState(); } };
-    const stopPtt = (e) => { e.preventDefault(); if(hasMic && !isMicLocked) { isPttActive = false; updateMicState(); } };
+const startPtt = (e) => { 
+  e.preventDefault(); // Good here: Prevents text selection/zooming when holding the button
+  if(hasMic && !isMicLocked) { 
+    isPttActive = true; 
+    updateMicState(); 
+  } 
+};
 
-    pttBtn.addEventListener('mousedown', startPtt);
-    pttBtn.addEventListener('touchstart', startPtt);
-    window.addEventListener('mouseup', stopPtt);
-    window.addEventListener('touchend', stopPtt);
+const stopPtt = (e) => { 
+  // REMOVED e.preventDefault() - It was blocking mobile taps globally!
+  if(hasMic && !isMicLocked && isPttActive) { 
+    isPttActive = false; 
+    updateMicState(); 
+  } 
+};
+
+pttBtn.addEventListener('mousedown', startPtt);
+pttBtn.addEventListener('touchstart', startPtt, { passive: false });
+window.addEventListener('mouseup', stopPtt);
+window.addEventListener('touchend', stopPtt);
 
     // Lock Bindings
     lockBtn.onclick = () => {

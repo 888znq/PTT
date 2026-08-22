@@ -206,8 +206,8 @@
     <span id="buzzToastText">Buzz</span>
   </div>
 
+  <!-- Background Canvas Logic -->
   <script>
-    // WebGL Matrix Background
     (function () {
       const canvas = document.getElementById('bgCanvas');
       const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
@@ -234,6 +234,7 @@
     })();
   </script>
 
+  <!-- Core App Logic -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
     import { getFirestore, collection, doc, setDoc, onSnapshot, addDoc, deleteDoc, query, where, orderBy, limit, getDoc, getDocs } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
@@ -290,7 +291,6 @@
     const micToggleBtn = document.getElementById('micToggleBtn');
     const speakerToggleBtn = document.getElementById('speakerToggleBtn');
 
-    // Setup Keep-Alive Audio to hold mobile browser audio thread open in background
     function setupKeepAliveAudio() {
       if (!keepAliveAudio) {
         keepAliveAudio = new Audio('data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA');
@@ -299,7 +299,6 @@
       }
     }
 
-    // Setup MediaSession for Lock Screen / Headset Physical button toggling
     function setupMediaSession() {
       if ('mediaSession' in navigator) {
         navigator.mediaSession.metadata = new MediaMetadata({
@@ -308,22 +307,18 @@
           album: 'Hands-Free Channel',
           artwork: [{ src: 'https://cdn-icons-png.flaticon.com/512/3114/3114320.png', sizes: '512x512', type: 'image/png' }]
         });
-
         const toggleMicAction = () => {
           if (!hasMic) return;
           isMicUnmuted = !isMicUnmuted;
           updateAudioState();
         };
-
         navigator.mediaSession.setActionHandler('play', toggleMicAction);
         navigator.mediaSession.setActionHandler('pause', toggleMicAction);
-        try { navigator.mediaSession.setActionHandler('stop', toggleMicAction); } catch (e) {}
-        try { navigator.mediaSession.setActionHandler('togglemicrophone', toggleMicAction); } catch (e) {}
       }
     }
 
     function updateAudioState() {
-      // 1. Mic Track Handling
+      // 1. Force the WebRTC Mic Track to enabled/disabled
       if (localStream) {
         localStream.getAudioTracks().forEach(t => t.enabled = isMicUnmuted);
       }
@@ -338,9 +333,15 @@
         micToggleBtn.textContent = "MIC: MUTED";
       }
 
-      // 2. Speaker Remote Audio Handling
+      // 2. Force Remote Audio Tags to Update and Play
       const remoteAudios = document.querySelectorAll('#audioContainer audio');
-      remoteAudios.forEach(a => a.muted = !isSpeakerOn);
+      remoteAudios.forEach(a => {
+        a.muted = !isSpeakerOn;
+        if (isSpeakerOn) {
+           // Explicitly calling play bypasses mobile blocking if triggered by this button tap
+           a.play().catch(() => console.warn("Browser blocked audio play")); 
+        }
+      });
 
       if (isSpeakerOn) {
         speakerToggleBtn.className = 'btn toggle-btn active-speaker';
@@ -350,7 +351,6 @@
         speakerToggleBtn.textContent = "SPEAKER: MUTED";
       }
 
-      // 3. Update Lock Screen Playback State
       if ('mediaSession' in navigator) {
         navigator.mediaSession.playbackState = isMicUnmuted ? 'playing' : 'paused';
       }
@@ -418,10 +418,6 @@
       showBuzzToast(fromName + ' is buzzing the Live Line!');
       document.body.classList.add('incoming-buzz');
       setTimeout(() => document.body.classList.remove('incoming-buzz'), 3200);
-      
-      if ('Notification' in window && Notification.permission === 'granted' && document.hidden) {
-        new Notification('Live Line Alert', { body: fromName + ' is buzzing you!' });
-      }
     }
 
     async function sendBuzz(targetUid, btnEl) {
@@ -436,7 +432,7 @@
         await addDoc(collection(db, 'family_buzz'), {
           sender: myUid, senderName: myName, receiver: targetUid, timestamp: now
         });
-      } catch (e) { console.error('Buzz send error', e); }
+      } catch (e) {}
       
       relayPushBuzz(targetUid);
       
@@ -445,29 +441,32 @@
       }
     }
 
-    function handleBuzzDoc(docSnap) {
-      const data = docSnap.data();
-      if (data.sender !== myUid) {
-        triggerIncomingBuzz(data.senderName || 'An Agent');
-      }
-      deleteDoc(doc(db, 'family_buzz', docSnap.id)).catch(() => {});
-    }
-
     function listenForBuzzes() {
       const qMine = query(collection(db, 'family_buzz'), where('receiver', '==', myUid));
       onSnapshot(qMine, (snapshot) => {
-        snapshot.docChanges().forEach((change) => { if (change.type === 'added') handleBuzzDoc(change.doc); });
+        snapshot.docChanges().forEach((change) => { 
+          if (change.type === 'added') {
+            if (change.doc.data().sender !== myUid) triggerIncomingBuzz(change.doc.data().senderName || 'An Agent');
+            deleteDoc(doc(db, 'family_buzz', change.doc.id)).catch(() => {});
+          }
+        });
       });
 
       const qAll = query(collection(db, 'family_buzz'), where('receiver', '==', 'all'));
       onSnapshot(qAll, (snapshot) => {
-        snapshot.docChanges().forEach((change) => { if (change.type === 'added') handleBuzzDoc(change.doc); });
+        snapshot.docChanges().forEach((change) => { 
+          if (change.type === 'added') {
+             if (change.doc.data().sender !== myUid) triggerIncomingBuzz(change.doc.data().senderName || 'An Agent');
+             deleteDoc(doc(db, 'family_buzz', change.doc.id)).catch(() => {});
+          } 
+        });
       });
     }
 
     const buzzAllBtnEl = document.getElementById('buzzAllBtn');
     buzzAllBtnEl.onclick = () => sendBuzz('all', buzzAllBtnEl);
 
+    // Chat Logic
     const chatMessagesEl = document.getElementById('chatMessages');
     const chatInputEl = document.getElementById('chatInput');
     const chatSendBtnEl = document.getElementById('chatSendBtn');
@@ -476,10 +475,8 @@
       const row = document.createElement('div');
       const isMe = data.sender === myUid;
       row.style.color = isMe ? '#00e5a0' : '#ffffff';
-      
       const time = data.timestamp ? new Date(data.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
       row.textContent = `[${time}] ${data.senderName || 'Agent'}${isMe ? ' (You)' : ''}: ${data.text}`;
-      
       chatMessagesEl.appendChild(row);
       chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
     }
@@ -489,10 +486,8 @@
       if (!text) return;
       chatInputEl.value = '';
       try {
-        await addDoc(collection(db, 'family_chat'), {
-          sender: myUid, senderName: myName, text: text, timestamp: Date.now()
-        });
-      } catch (e) { console.error('Chat send error', e); }
+        await addDoc(collection(db, 'family_chat'), { sender: myUid, senderName: myName, text: text, timestamp: Date.now() });
+      } catch (e) {}
     }
 
     chatSendBtnEl.onclick = sendChatMessage;
@@ -509,6 +504,7 @@
       });
     }
 
+    // WebRTC Logic
     function createPeer(targetUid) {
       const pc = new RTCPeerConnection(servers);
       candidateQueues[targetUid] = [];
@@ -523,17 +519,19 @@
           audio = document.createElement('audio');
           audio.id = 'audio-' + targetUid;
           audio.autoplay = true;
+          audio.playsInline = true; // REQUIRED FOR MOBILE TO ALLOW AUTOPLAY
           audio.muted = !isSpeakerOn;
           document.getElementById('audioContainer').appendChild(audio);
         }
         audio.srcObject = event.streams[0];
+        
+        // Force audio to play once stream is attached
+        if (isSpeakerOn) audio.play().catch(e => console.warn("Audio blocked:", e));
       };
 
       pc.onicecandidate = (event) => {
         if (event.candidate) {
-          addDoc(collection(db, 'family_signals'), {
-            sender: myUid, receiver: targetUid, type: 'candidate', payload: JSON.stringify(event.candidate.toJSON())
-          });
+          addDoc(collection(db, 'family_signals'), { sender: myUid, receiver: targetUid, type: 'candidate', payload: JSON.stringify(event.candidate.toJSON()) });
         }
       };
 
@@ -565,7 +563,6 @@
             const data = change.doc.data();
             const sender = data.sender;
             const payload = JSON.parse(data.payload);
-
             deleteDoc(doc(db, 'family_signals', change.doc.id)).catch(() => {});
 
             try {
@@ -573,13 +570,9 @@
                 const pc = createPeer(sender);
                 await pc.setRemoteDescription(new RTCSessionDescription(payload));
                 processQueuedCandidates(sender, pc);
-                
                 const answer = await pc.createAnswer();
                 await pc.setLocalDescription(answer);
-                
-                await addDoc(collection(db, 'family_signals'), {
-                  sender: myUid, receiver: sender, type: 'answer', payload: JSON.stringify(answer)
-                });
+                await addDoc(collection(db, 'family_signals'), { sender: myUid, receiver: sender, type: 'answer', payload: JSON.stringify(answer) });
               } else if (data.type === 'answer') {
                 const pc = peers[sender];
                 if (pc) {
@@ -589,16 +582,13 @@
               } else if (data.type === 'candidate') {
                 const pc = peers[sender];
                 const candidate = new RTCIceCandidate(payload);
-                if (pc && pc.remoteDescription) {
-                  await pc.addIceCandidate(candidate);
-                } else {
+                if (pc && pc.remoteDescription) await pc.addIceCandidate(candidate);
+                else {
                   candidateQueues[sender] = candidateQueues[sender] || [];
                   candidateQueues[sender].push(candidate);
                 }
               }
-            } catch (e) {
-              console.error("Signal handling error", e);
-            }
+            } catch (e) {}
           }
         });
       });
@@ -609,10 +599,20 @@
       
       onSnapshot(collection(db, 'family_presence'), (snapshot) => {
         membersList.innerHTML = '';
+        const now = Date.now();
         
         snapshot.forEach((docSnap) => {
           const data = docSnap.data();
           const uid = docSnap.id;
+          
+          // STRICT FILTER: If marked offline OR hasn't pinged server in 2 minutes, ignore them
+          if (!data.online || (now - data.lastSeen > 120000)) {
+            if (peers[uid] && peers[uid].connectionState !== 'closed') {
+               peers[uid].close();
+               delete peers[uid];
+            }
+            return;
+          }
           
           const li = document.createElement('li');
           const nameWrap = document.createElement('div');
@@ -635,8 +635,6 @@
             if (cooldownEnd && Date.now() < cooldownEnd) {
               buzzBtn.disabled = true;
               buzzBtn.textContent = 'BUZZED';
-            } else {
-              buzzBtn.disabled = !data.online;
             }
             buzzBtn.onclick = () => sendBuzz(uid, buzzBtn);
             li.appendChild(buzzBtn);
@@ -644,7 +642,7 @@
           
           membersList.appendChild(li);
 
-          if (data.online && uid !== myUid && myUid > uid) {
+          if (uid !== myUid && myUid > uid) {
             if (!peers[uid] || peers[uid].connectionState === 'closed') {
               initiateCall(uid);
             }
@@ -657,62 +655,43 @@
       const pc = createPeer(targetUid);
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
-      await addDoc(collection(db, 'family_signals'), {
-        sender: myUid, receiver: targetUid, type: 'offer', payload: JSON.stringify(offer)
-      });
+      await addDoc(collection(db, 'family_signals'), { sender: myUid, receiver: targetUid, type: 'offer', payload: JSON.stringify(offer) });
     }
 
     async function subscribeToPush() {
       if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
       if (!GLITCH_WORKER_URL || !VAPID_PUBLIC_KEY || GLITCH_WORKER_URL.includes('YOUR-GLITCH-PROJECT')) return;
-      
       try {
         const permission = await Notification.requestPermission();
         if (permission !== 'granted') return;
-
         const registration = await navigator.serviceWorker.ready;
         let sub = await registration.pushManager.getSubscription();
         if (!sub) {
-          sub = await registration.pushManager.subscribe({
-            userVisibleOnly: true,
-            applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
-          });
+          sub = await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY) });
         }
-        await setDoc(doc(db, 'family_push_subscriptions', myUid), {
-          subscription: JSON.stringify(sub.toJSON()),
-          name: myName,
-          updatedAt: Date.now()
-        });
-      } catch (e) {
-        console.warn('Push subscription failed', e);
-      }
+        await setDoc(doc(db, 'family_push_subscriptions', myUid), { subscription: JSON.stringify(sub.toJSON()), name: myName, updatedAt: Date.now() });
+      } catch (e) {}
     }
 
     async function relayPushBuzz(targetUid) {
       if (!GLITCH_WORKER_URL || !VAPID_PUBLIC_KEY || GLITCH_WORKER_URL.includes('YOUR-GLITCH-PROJECT')) return;
       try {
         let targetDocs = [];
-        
         if (targetUid === 'all') {
-          const q = query(collection(db, 'family_push_subscriptions'));
-          const snap = await getDocs(q);
+          const snap = await getDocs(query(collection(db, 'family_push_subscriptions')));
           snap.forEach(d => { if (d.id !== myUid) targetDocs.push(d.data().subscription) });
         } else {
           const docSnap = await getDoc(doc(db, 'family_push_subscriptions', targetUid));
           if (docSnap.exists()) targetDocs.push(docSnap.data().subscription);
         }
-
         for (const subStr of targetDocs) {
-          const subObj = JSON.parse(subStr);
           await fetch(GLITCH_WORKER_URL + '/buzz', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ subscription: subObj, senderName: myName })
+            body: JSON.stringify({ subscription: JSON.parse(subStr), senderName: myName })
           });
         }
-      } catch (e) {
-        console.warn('Push relay failed', e);
-      }
+      } catch (e) {}
     }
 
     document.getElementById('joinBtn').onclick = async () => {
@@ -733,7 +712,6 @@
         localStream.getAudioTracks().forEach(t => t.enabled = false);
         hasMic = true;
       } catch (e) {
-        console.warn('Mic unavailable, joining in listen/chat-only mode', e);
         localStream = null;
         hasMic = false;
       }
@@ -758,6 +736,11 @@
         });
         hasJoined = true;
         
+        // HEARTBEAT TO PREVENT "GHOSTING" (Pings DB every 45 seconds)
+        setInterval(() => {
+            if (hasJoined) setDoc(doc(db, 'family_presence', myUid), { lastSeen: Date.now() }, { merge: true }).catch(()=>{});
+        }, 45000);
+
         subscribeToPush();
         listenForSignals();
         listenForPresence();
@@ -772,8 +755,6 @@
         document.getElementById('channelScreen').style.display = 'flex';
         
       } catch (e) {
-        console.error(e);
-        alert("Could not connect to Firestore. Check console and security rules.");
         btn.disabled = false;
         btn.textContent = "CONNECT TO LIVE LINE";
       }

@@ -3,10 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Family PTT Channel</title>
-  <title>Family PTT Channel</title>
+  <title>Live Line - Tactical Voice</title>
   
-  <!-- Add these 3 lines for PWA & iOS support! -->
   <link rel="manifest" href="./manifest.json">
   <meta name="theme-color" content="#0f0420">
   <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/3114/3114320.png">
@@ -72,7 +70,7 @@
       gap: 1rem;
     }
 
-    .header { text-align: center; padding: 1.5rem 0 0.5rem; }
+    .header { text-align: center; padding: 1rem 0 0.2rem; }
     .logo { display: flex; align-items: center; justify-content: center; gap: 0.6rem; margin-bottom: 0.4rem; }
     .logo-icon { width: 32px; height: 32px; background: var(--accent-dim); border: 1px solid var(--accent); border-radius: 8px; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 12px var(--accent-glow); }
     .logo-icon svg { color: #ffffff; }
@@ -97,15 +95,21 @@
     .btn:hover:not(:disabled) { background: rgba(179,136,255,0.2); box-shadow: 0 0 16px var(--accent-glow); }
     .btn:disabled { background: rgba(255,255,255,0.04); color: var(--muted); border-color: var(--border); cursor: not-allowed; box-shadow: none; }
 
+    .controls-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 0.75rem; }
+    .toggle-btn { height: 60px; font-size: 0.85rem; border-radius: 8px; display: flex; align-items: center; justify-content: center; gap: 0.5rem; }
+    .toggle-btn.active-mic { background: var(--success); color: #000; border-color: var(--success); box-shadow: 0 0 16px rgba(0, 229, 160, 0.4); }
+    .toggle-btn.active-speaker { background: var(--accent); color: #000; border-color: var(--accent); box-shadow: 0 0 16px var(--accent-glow); }
+    .toggle-btn.muted { background: rgba(255, 77, 109, 0.15); border-color: var(--danger); color: var(--danger); }
+
     .members-list { list-style: none; padding: 0; margin: 0; }
-    .members-list li { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; font-family: 'IBM Plex Mono', monospace; font-size: 0.9rem; }
+    .members-list li { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; font-family: 'IBM Plex Mono', monospace; font-size: 0.85rem; }
     .members-list li:last-child { margin-bottom: 0; }
     .member-name { display: flex; align-items: center; gap: 10px; }
     
     .buzz-member-btn { background: transparent; border: 1px solid var(--warning); color: var(--warning); border-radius: 6px; padding: 0.3rem 0.6rem; font-family: 'IBM Plex Mono', monospace; font-size: 0.7rem; font-weight: 600; cursor: pointer; letter-spacing: 0.03em; width: auto; transition: all 0.15s ease; }
     .buzz-member-btn:hover:not(:disabled) { background: rgba(255,209,102,0.15); box-shadow: 0 0 10px rgba(255,209,102,0.35); }
     .buzz-member-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-    .buzz-all-btn { background: var(--accent-dim); border: 1px solid var(--warning); color: var(--warning); margin-top: 0.75rem; }
+    .buzz-all-btn { background: var(--accent-dim); border: 1px solid var(--warning); color: var(--warning); }
     
     body.incoming-buzz { animation: buzzFlash 0.5s ease-in-out 6; }
     @keyframes buzzFlash { 0%, 100% { background: var(--bg); } 50% { background: rgba(255,209,102,0.25); } }
@@ -113,23 +117,14 @@
     .buzz-toast { position: fixed; top: 1rem; left: 50%; transform: translateX(-50%); z-index: 50; background: var(--surface); border: 1px solid var(--warning); border-radius: 8px; padding: 0.7rem 1.2rem; font-family: 'IBM Plex Mono', monospace; font-size: 0.85rem; box-shadow: 0 0 20px rgba(255,209,102,0.4); display: none; align-items: center; gap: 0.5rem; }
     .buzz-toast.show { display: flex; }
 
-    .ptt-btn { height: 100px; border-radius: 12px; font-size: 1rem; margin-bottom: 1rem; -webkit-user-select: none; user-select: none; transition: background 0.1s, transform 0.1s; touch-action: none; }
-    .ptt-btn:active, .ptt-btn.active { transform: scale(0.96); background: var(--success); color: #000; box-shadow: 0 0 20px rgba(0, 229, 160, 0.4); border-color: var(--success); }
-    
-    .lock-btn { background: transparent; border-color: var(--border); }
-    .lock-btn.locked { background: var(--danger); border-color: var(--danger); color: white; box-shadow: 0 0 16px rgba(255, 77, 109, 0.4); }
-
-    .divider { display: flex; align-items: center; gap: 0.75rem; font-size: 0.75rem; font-family: 'IBM Plex Mono', monospace; margin-bottom: 1rem; color: var(--muted); }
-    .divider::before, .divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
-
-    .waveform { display: none; align-items: center; justify-content: center; gap: 3px; height: 24px; margin-bottom: 1rem; }
+    .waveform { display: none; align-items: center; justify-content: center; gap: 4px; height: 28px; margin-bottom: 0.75rem; }
     .waveform.active { display: flex; }
-    .waveform span { display: block; width: 3px; border-radius: 3px; background: var(--success); animation: wave 1.2s ease-in-out infinite; }
-    .waveform span:nth-child(1) { height: 6px; animation-delay: 0s; }
-    .waveform span:nth-child(2) { height: 14px; animation-delay: 0.1s; }
-    .waveform span:nth-child(3) { height: 20px; animation-delay: 0.2s; }
-    .waveform span:nth-child(4) { height: 14px; animation-delay: 0.3s; }
-    .waveform span:nth-child(5) { height: 8px; animation-delay: 0.4s; }
+    .waveform span { display: block; width: 4px; border-radius: 4px; background: var(--success); animation: wave 1.2s ease-in-out infinite; }
+    .waveform span:nth-child(1) { height: 8px; animation-delay: 0s; }
+    .waveform span:nth-child(2) { height: 18px; animation-delay: 0.1s; }
+    .waveform span:nth-child(3) { height: 26px; animation-delay: 0.2s; }
+    .waveform span:nth-child(4) { height: 18px; animation-delay: 0.3s; }
+    .waveform span:nth-child(5) { height: 10px; animation-delay: 0.4s; }
 
     @keyframes wave {
       0%, 100% { transform: scaleY(0.4); opacity: 0.5; }
@@ -152,45 +147,53 @@
             <line x1="8" y1="23" x2="16" y2="23"/>
           </svg>
         </div>
-        <h1>FAMILY LINE</h1>
+        <h1>LIVE LINE</h1>
       </div>
-      <p class="subtitle">always live // always muted // ptt</p>
+      <p class="subtitle">tactical voice // lock-screen ready // hands-free</p>
     </div>
 
     <!-- Login Screen -->
     <div id="loginScreen" class="card">
-      <div class="card-label">Identity</div>
-      <input type="text" id="userNameInput" placeholder="Enter your name (e.g., Mom)">
-      <button class="btn" id="joinBtn">Connect to Network</button>
+      <div class="card-label">Identity & Call Sign</div>
+      <input type="text" id="userNameInput" placeholder="Enter Call Sign (e.g. Agent 007)">
+      <button class="btn" id="joinBtn">CONNECT TO LIVE LINE</button>
     </div>
 
-    <!-- Main Channel Screen -->
+    <!-- Main Live Screen -->
     <div id="channelScreen" style="display: none; flex-direction: column; gap: 1rem;">
       <div class="status-bar" id="statusBar">
         <div class="status-dot connected"></div>
-        <span id="statusText">Live connection established</span>
+        <span id="statusText">Live Line Active</span>
       </div>
 
-      <div class="card">
-        <div class="card-label">Network Status</div>
-        <ul class="members-list" id="membersList"></ul>
-        <button id="buzzAllBtn" class="btn buzz-all-btn">BUZZ EVERYONE</button>
-      </div>
-
+      <!-- Controls Card -->
       <div class="card" style="text-align: center;">
+        <div class="card-label">Voice & Audio Controls</div>
+        
         <div class="waveform" id="waveform">
           <span></span><span></span><span></span><span></span><span></span>
         </div>
-        <button id="pttBtn" class="btn ptt-btn">PRESS AND HOLD TO SPEAK</button>
-        <div class="divider">or continuous transmission</div>
-        <button id="lockBtn" class="btn lock-btn">MIC LOCK: OFF</button>
+
+        <div class="controls-grid">
+          <button id="micToggleBtn" class="btn toggle-btn muted">MIC: MUTED</button>
+          <button id="speakerToggleBtn" class="btn toggle-btn active-speaker">SPEAKER: ON</button>
+        </div>
+
+        <button id="buzzAllBtn" class="btn buzz-all-btn">BUZZ ALL AGENTS</button>
+      </div>
+
+      <!-- Network Presence Card -->
+      <div class="card">
+        <div class="card-label">Active Agents</div>
+        <ul class="members-list" id="membersList"></ul>
       </div>
       
+      <!-- Text Comms Card -->
       <div class="card" id="chatCard">
-        <div class="card-label">Text Chat</div>
-        <div id="chatMessages" style="max-height:180px; overflow-y:auto; margin-bottom:0.75rem; font-family:'IBM Plex Mono', monospace; font-size:0.8rem; display:flex; flex-direction:column; gap:0.4rem; padding-right: 5px;"></div>
+        <div class="card-label">Tactical Chat</div>
+        <div id="chatMessages" style="max-height:160px; overflow-y:auto; margin-bottom:0.75rem; font-family:'IBM Plex Mono', monospace; font-size:0.8rem; display:flex; flex-direction:column; gap:0.4rem; padding-right: 5px;"></div>
         <div style="display:flex; gap:0.5rem;">
-          <input type="text" id="chatInput" placeholder="Type a message..." style="margin-bottom:0;">
+          <input type="text" id="chatInput" placeholder="Transmit intel..." style="margin-bottom:0;">
           <button id="chatSendBtn" class="btn" style="width:auto; padding:0.8rem 1.2rem;">SEND</button>
         </div>
       </div>
@@ -204,6 +207,7 @@
   </div>
 
   <script>
+    // WebGL Matrix Background
     (function () {
       const canvas = document.getElementById('bgCanvas');
       const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
@@ -247,14 +251,8 @@
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
-    // --- YOUR BACKEND CONNECTION ---
-    // PASTE YOUR LIVE RENDER URL HERE ONCE IT IS DEPLOYED
     const GLITCH_WORKER_URL = "https://ptt-backend-zi8u.onrender.com"; 
-    
-    // THE PUBLIC KEY (Must match the backend exactly)
     const VAPID_PUBLIC_KEY = "BCPTdBcEXkGuQTtLehEmXp7KkN5jqhAyp4VbL7GZn1ixXAyt_AOXq6qAzzSJO8BM47YnfdGmLc990m0P3ER_2RA";
-
-    // ... (rest of the code remains exactly the same) ...
 
     function urlBase64ToUint8Array(base64String) {
       const padding = '='.repeat((4 - base64String.length % 4) % 4);
@@ -279,70 +277,105 @@
     if (myName) userNameInput.value = myName;
 
     let localStream = null;
+    let keepAliveAudio = null;
     const peers = {};
     const candidateQueues = {};
 
-    let isMicLocked = false;
-    let isPttActive = false;
+    let isMicUnmuted = false;
+    let isSpeakerOn = true;
     let hasJoined = false;
     let hasMic = false;
     
     const waveform = document.getElementById('waveform');
-    const pttBtn = document.getElementById('pttBtn');
-    const lockBtn = document.getElementById('lockBtn');
+    const micToggleBtn = document.getElementById('micToggleBtn');
+    const speakerToggleBtn = document.getElementById('speakerToggleBtn');
 
-    function updateMicState() {
-      const shouldBeOn = isMicLocked || isPttActive;
-      if (localStream) {
-        localStream.getAudioTracks().forEach(t => t.enabled = shouldBeOn);
-      }
-      
-      if (shouldBeOn) {
-        waveform.classList.add('active');
-        pttBtn.classList.add('active');
-        pttBtn.textContent = "TRANSMITTING...";
-      } else {
-        waveform.classList.remove('active');
-        pttBtn.classList.remove('active');
-        pttBtn.textContent = "PRESS AND HOLD TO SPEAK";
-      }
-      
-      lockBtn.textContent = isMicLocked ? 'MIC LOCK: ON' : 'MIC LOCK: OFF';
-      lockBtn.className = isMicLocked ? 'btn lock-btn locked' : 'btn lock-btn';
-
-      if (hasJoined) {
-        setDoc(doc(db, 'family_presence', myUid), { speaking: shouldBeOn }, { merge: true }).catch(() => {});
+    // Setup Keep-Alive Audio to hold mobile browser audio thread open in background
+    function setupKeepAliveAudio() {
+      if (!keepAliveAudio) {
+        keepAliveAudio = new Audio('data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA');
+        keepAliveAudio.loop = true;
+        keepAliveAudio.play().catch(() => {});
       }
     }
 
-    const startPtt = (e) => { 
-      e.preventDefault(); 
-      if(hasMic && !isMicLocked) { 
-        isPttActive = true; 
-        updateMicState(); 
-      } 
-    };
+    // Setup MediaSession for Lock Screen / Headset Physical button toggling
+    function setupMediaSession() {
+      if ('mediaSession' in navigator) {
+        navigator.mediaSession.metadata = new MediaMetadata({
+          title: 'Live Tactical Line',
+          artist: myName || 'Agent Comms',
+          album: 'Hands-Free Channel',
+          artwork: [{ src: 'https://cdn-icons-png.flaticon.com/512/3114/3114320.png', sizes: '512x512', type: 'image/png' }]
+        });
 
-    const stopPtt = (e) => { 
-      if(hasMic && !isMicLocked && isPttActive) { 
-        isPttActive = false; 
-        updateMicState(); 
-      } 
-    };
+        const toggleMicAction = () => {
+          if (!hasMic) return;
+          isMicUnmuted = !isMicUnmuted;
+          updateAudioState();
+        };
 
-    pttBtn.addEventListener('mousedown', startPtt);
-    pttBtn.addEventListener('touchstart', startPtt, { passive: false });
-    window.addEventListener('mouseup', stopPtt);
-    window.addEventListener('touchend', stopPtt);
+        navigator.mediaSession.setActionHandler('play', toggleMicAction);
+        navigator.mediaSession.setActionHandler('pause', toggleMicAction);
+        try { navigator.mediaSession.setActionHandler('stop', toggleMicAction); } catch (e) {}
+        try { navigator.mediaSession.setActionHandler('togglemicrophone', toggleMicAction); } catch (e) {}
+      }
+    }
 
-    lockBtn.onclick = () => {
+    function updateAudioState() {
+      // 1. Mic Track Handling
+      if (localStream) {
+        localStream.getAudioTracks().forEach(t => t.enabled = isMicUnmuted);
+      }
+      
+      if (isMicUnmuted) {
+        waveform.classList.add('active');
+        micToggleBtn.className = 'btn toggle-btn active-mic';
+        micToggleBtn.textContent = "MIC: LIVE (ON)";
+      } else {
+        waveform.classList.remove('active');
+        micToggleBtn.className = 'btn toggle-btn muted';
+        micToggleBtn.textContent = "MIC: MUTED";
+      }
+
+      // 2. Speaker Remote Audio Handling
+      const remoteAudios = document.querySelectorAll('#audioContainer audio');
+      remoteAudios.forEach(a => a.muted = !isSpeakerOn);
+
+      if (isSpeakerOn) {
+        speakerToggleBtn.className = 'btn toggle-btn active-speaker';
+        speakerToggleBtn.textContent = "SPEAKER: ON";
+      } else {
+        speakerToggleBtn.className = 'btn toggle-btn muted';
+        speakerToggleBtn.textContent = "SPEAKER: MUTED";
+      }
+
+      // 3. Update Lock Screen Playback State
+      if ('mediaSession' in navigator) {
+        navigator.mediaSession.playbackState = isMicUnmuted ? 'playing' : 'paused';
+      }
+
+      if (hasJoined) {
+        setDoc(doc(db, 'family_presence', myUid), { 
+          speaking: isMicUnmuted,
+          speakerOn: isSpeakerOn
+        }, { merge: true }).catch(() => {});
+      }
+    }
+
+    micToggleBtn.onclick = () => {
       if (!hasMic) return;
-      isMicLocked = !isMicLocked;
-      updateMicState();
+      isMicUnmuted = !isMicUnmuted;
+      updateAudioState();
+    };
+
+    speakerToggleBtn.onclick = () => {
+      isSpeakerOn = !isSpeakerOn;
+      updateAudioState();
     };
 
     const buzzCooldowns = {};
-    const BUZZ_COOLDOWN_MS = 4000;
+    const BUZZ_COOLDOWN_MS = 3000;
     let audioCtx = null;
 
     if ('Notification' in window && Notification.permission === 'default') {
@@ -352,6 +385,7 @@
     function playBuzzTone() {
       try {
         audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+        if (audioCtx.state === 'suspended') audioCtx.resume();
         const now = audioCtx.currentTime;
         for (let i = 0; i < 3; i++) {
           const osc = audioCtx.createOscillator();
@@ -380,13 +414,13 @@
 
     function triggerIncomingBuzz(fromName) {
       playBuzzTone();
-      if (navigator.vibrate) navigator.vibrate([300, 150, 300, 150, 300]);
-      showBuzzToast(fromName + ' is buzzing you!');
+      if (navigator.vibrate) navigator.vibrate([400, 150, 400, 150, 400]);
+      showBuzzToast(fromName + ' is buzzing the Live Line!');
       document.body.classList.add('incoming-buzz');
       setTimeout(() => document.body.classList.remove('incoming-buzz'), 3200);
       
       if ('Notification' in window && Notification.permission === 'granted' && document.hidden) {
-        new Notification('Family Line', { body: fromName + ' is buzzing you!' });
+        new Notification('Live Line Alert', { body: fromName + ' is buzzing you!' });
       }
     }
 
@@ -414,7 +448,7 @@
     function handleBuzzDoc(docSnap) {
       const data = docSnap.data();
       if (data.sender !== myUid) {
-        triggerIncomingBuzz(data.senderName || 'Someone');
+        triggerIncomingBuzz(data.senderName || 'An Agent');
       }
       deleteDoc(doc(db, 'family_buzz', docSnap.id)).catch(() => {});
     }
@@ -444,7 +478,7 @@
       row.style.color = isMe ? '#00e5a0' : '#ffffff';
       
       const time = data.timestamp ? new Date(data.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
-      row.textContent = `[${time}] ${data.senderName || 'Someone'}${isMe ? ' (You)' : ''}: ${data.text}`;
+      row.textContent = `[${time}] ${data.senderName || 'Agent'}${isMe ? ' (You)' : ''}: ${data.text}`;
       
       chatMessagesEl.appendChild(row);
       chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
@@ -489,6 +523,7 @@
           audio = document.createElement('audio');
           audio.id = 'audio-' + targetUid;
           audio.autoplay = true;
+          audio.muted = !isSpeakerOn;
           document.getElementById('audioContainer').appendChild(audio);
         }
         audio.srcObject = event.streams[0];
@@ -587,7 +622,7 @@
           dot.className = 'status-dot ' + (data.online ? 'connected' : 'error') + (data.speaking ? ' speaking' : '');
           nameWrap.appendChild(dot);
           
-          const label = data.name + (uid === myUid ? ' (You)' : '') + (data.speaking ? ' \uD83D\uDD0A' : '') + (data.hasMic === false ? ' \uD83D\uDD07' : '');
+          const label = data.name + (uid === myUid ? ' (You)' : '') + (data.speaking ? ' 🎙️ LIVE' : ' 🔇 Muted');
           nameWrap.appendChild(document.createTextNode(label));
           li.appendChild(nameWrap);
           
@@ -682,14 +717,14 @@
 
     document.getElementById('joinBtn').onclick = async () => {
       const name = userNameInput.value.trim();
-      if (!name) return alert("Please enter a name.");
+      if (!name) return alert("Please enter a call sign.");
       
       localStorage.setItem('myName', name);
       myName = name;
 
       const btn = document.getElementById('joinBtn');
       btn.disabled = true;
-      btn.textContent = "Connecting to Network...";
+      btn.textContent = "Arming Comms Channel...";
 
       try { audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {}
 
@@ -703,12 +738,13 @@
         hasMic = false;
       }
 
-      updateMicState();
+      setupKeepAliveAudio();
+      setupMediaSession();
+      updateAudioState();
 
       if (!hasMic) {
-        pttBtn.disabled = true;
-        pttBtn.textContent = "NO MIC (LISTEN / CHAT ONLY)";
-        lockBtn.disabled = true;
+        micToggleBtn.disabled = true;
+        micToggleBtn.textContent = "NO MIC (LISTEN ONLY)";
       }
 
       try {
@@ -716,13 +752,13 @@
           name: myName,
           online: true,
           speaking: false,
+          speakerOn: isSpeakerOn,
           hasMic: hasMic,
           lastSeen: Date.now()
         });
         hasJoined = true;
         
         subscribeToPush();
-
         listenForSignals();
         listenForPresence();
         listenForBuzzes();
@@ -739,7 +775,7 @@
         console.error(e);
         alert("Could not connect to Firestore. Check console and security rules.");
         btn.disabled = false;
-        btn.textContent = "Connect to Network";
+        btn.textContent = "CONNECT TO LIVE LINE";
       }
     };
   </script>

@@ -95,10 +95,8 @@
     .btn:hover:not(:disabled) { background: rgba(179,136,255,0.2); box-shadow: 0 0 16px var(--accent-glow); }
     .btn:disabled { background: rgba(255,255,255,0.04); color: var(--muted); border-color: var(--border); cursor: not-allowed; box-shadow: none; }
 
-    .controls-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 0.75rem; }
-    .toggle-btn { height: 60px; font-size: 0.85rem; border-radius: 8px; display: flex; align-items: center; justify-content: center; gap: 0.5rem; }
-    .toggle-btn.active-mic { background: var(--success); color: #000; border-color: var(--success); box-shadow: 0 0 16px rgba(0, 229, 160, 0.4); }
-    .toggle-btn.active-speaker { background: var(--accent); color: #000; border-color: var(--accent); box-shadow: 0 0 16px var(--accent-glow); }
+    .toggle-btn { height: 70px; font-size: 0.95rem; border-radius: 8px; display: flex; align-items: center; justify-content: center; gap: 0.5rem; margin-bottom: 0.75rem; width: 100%; }
+    .toggle-btn.active-comms { background: var(--success); color: #000; border-color: var(--success); box-shadow: 0 0 20px rgba(0, 229, 160, 0.4); }
     .toggle-btn.muted { background: rgba(255, 77, 109, 0.15); border-color: var(--danger); color: var(--danger); }
 
     .members-list { list-style: none; padding: 0; margin: 0; }
@@ -117,7 +115,7 @@
     .buzz-toast { position: fixed; top: 1rem; left: 50%; transform: translateX(-50%); z-index: 50; background: var(--surface); border: 1px solid var(--warning); border-radius: 8px; padding: 0.7rem 1.2rem; font-family: 'IBM Plex Mono', monospace; font-size: 0.85rem; box-shadow: 0 0 20px rgba(255,209,102,0.4); display: none; align-items: center; gap: 0.5rem; }
     .buzz-toast.show { display: flex; }
 
-    .waveform { display: none; align-items: center; justify-content: center; gap: 4px; height: 28px; margin-bottom: 0.75rem; }
+    .waveform { display: none; align-items: center; justify-content: center; gap: 4px; height: 28px; margin-bottom: 1rem; }
     .waveform.active { display: flex; }
     .waveform span { display: block; width: 4px; border-radius: 4px; background: var(--success); animation: wave 1.2s ease-in-out infinite; }
     .waveform span:nth-child(1) { height: 8px; animation-delay: 0s; }
@@ -168,17 +166,13 @@
 
       <!-- Controls Card -->
       <div class="card" style="text-align: center;">
-        <div class="card-label">Voice & Audio Controls</div>
+        <div class="card-label">Master Audio Control</div>
         
         <div class="waveform" id="waveform">
           <span></span><span></span><span></span><span></span><span></span>
         </div>
 
-        <div class="controls-grid">
-          <button id="micToggleBtn" class="btn toggle-btn muted">MIC: MUTED</button>
-          <button id="speakerToggleBtn" class="btn toggle-btn active-speaker">SPEAKER: ON</button>
-        </div>
-
+        <button id="commsToggleBtn" class="btn toggle-btn muted">COMMS: MUTED (TAP TO GO LIVE)</button>
         <button id="buzzAllBtn" class="btn buzz-all-btn">BUZZ ALL AGENTS</button>
       </div>
 
@@ -281,15 +275,15 @@
     let keepAliveAudio = null;
     const peers = {};
     const candidateQueues = {};
+    const agentPresenceStates = {}; // Tracks agent states for connection beep
 
-    let isMicUnmuted = false;
-    let isSpeakerOn = true;
+    // Master Comms State
+    let isCommsLive = false; 
     let hasJoined = false;
     let hasMic = false;
     
     const waveform = document.getElementById('waveform');
-    const micToggleBtn = document.getElementById('micToggleBtn');
-    const speakerToggleBtn = document.getElementById('speakerToggleBtn');
+    const commsToggleBtn = document.getElementById('commsToggleBtn');
 
     function setupKeepAliveAudio() {
       if (!keepAliveAudio) {
@@ -307,70 +301,71 @@
           album: 'Hands-Free Channel',
           artwork: [{ src: 'https://cdn-icons-png.flaticon.com/512/3114/3114320.png', sizes: '512x512', type: 'image/png' }]
         });
-        const toggleMicAction = () => {
-          if (!hasMic) return;
-          isMicUnmuted = !isMicUnmuted;
+        const toggleCommsAction = async () => {
+          await attemptMicRecovery();
+          isCommsLive = !isCommsLive;
           updateAudioState();
         };
-        navigator.mediaSession.setActionHandler('play', toggleMicAction);
-        navigator.mediaSession.setActionHandler('pause', toggleMicAction);
+        navigator.mediaSession.setActionHandler('play', toggleCommsAction);
+        navigator.mediaSession.setActionHandler('pause', toggleCommsAction);
+      }
+    }
+
+    async function attemptMicRecovery() {
+       if (!hasMic) {
+        try {
+          localStream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
+          hasMic = true;
+          Object.values(peers).forEach(pc => {
+            localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+          });
+        } catch (e) {
+          alert("Microphone access is still blocked by your device settings.");
+        }
       }
     }
 
     function updateAudioState() {
-      // 1. Force the WebRTC Mic Track to enabled/disabled
+      // 1. Force the WebRTC Mic Track
       if (localStream) {
-        localStream.getAudioTracks().forEach(t => t.enabled = isMicUnmuted);
+        localStream.getAudioTracks().forEach(t => t.enabled = isCommsLive);
       }
       
-      if (isMicUnmuted) {
-        waveform.classList.add('active');
-        micToggleBtn.className = 'btn toggle-btn active-mic';
-        micToggleBtn.textContent = "MIC: LIVE (ON)";
-      } else {
-        waveform.classList.remove('active');
-        micToggleBtn.className = 'btn toggle-btn muted';
-        micToggleBtn.textContent = "MIC: MUTED";
-      }
-
-      // 2. Force Remote Audio Tags to Update and Play
+      // 2. Force Remote Speakers
       const remoteAudios = document.querySelectorAll('#audioContainer audio');
       remoteAudios.forEach(a => {
-        a.muted = !isSpeakerOn;
-        if (isSpeakerOn) {
-           // Explicitly calling play bypasses mobile blocking if triggered by this button tap
+        a.muted = !isCommsLive;
+        if (isCommsLive) {
            a.play().catch(() => console.warn("Browser blocked audio play")); 
         }
       });
 
-      if (isSpeakerOn) {
-        speakerToggleBtn.className = 'btn toggle-btn active-speaker';
-        speakerToggleBtn.textContent = "SPEAKER: ON";
+      // 3. UI Update
+      if (isCommsLive) {
+        waveform.classList.add('active');
+        commsToggleBtn.className = 'btn toggle-btn active-comms';
+        commsToggleBtn.textContent = "COMMS: LIVE (MIC & SPEAKER ON)";
       } else {
-        speakerToggleBtn.className = 'btn toggle-btn muted';
-        speakerToggleBtn.textContent = "SPEAKER: MUTED";
+        waveform.classList.remove('active');
+        commsToggleBtn.className = 'btn toggle-btn muted';
+        commsToggleBtn.textContent = "COMMS: MUTED (TAP TO GO LIVE)";
       }
 
       if ('mediaSession' in navigator) {
-        navigator.mediaSession.playbackState = isMicUnmuted ? 'playing' : 'paused';
+        navigator.mediaSession.playbackState = isCommsLive ? 'playing' : 'paused';
       }
 
       if (hasJoined) {
         setDoc(doc(db, 'family_presence', myUid), { 
-          speaking: isMicUnmuted,
-          speakerOn: isSpeakerOn
+          speaking: isCommsLive
         }, { merge: true }).catch(() => {});
       }
     }
 
-    micToggleBtn.onclick = () => {
-      if (!hasMic) return;
-      isMicUnmuted = !isMicUnmuted;
-      updateAudioState();
-    };
-
-    speakerToggleBtn.onclick = () => {
-      isSpeakerOn = !isSpeakerOn;
+    commsToggleBtn.onclick = async () => {
+      await attemptMicRecovery();
+      if(!hasMic) return;
+      isCommsLive = !isCommsLive;
       updateAudioState();
     };
 
@@ -382,6 +377,28 @@
       Notification.requestPermission().catch(() => {});
     }
 
+    // High pitched "Chirp" when an agent goes live
+    function playConnectBeep() {
+      try {
+        audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        const now = audioCtx.currentTime;
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(1200, now);
+        osc.frequency.exponentialRampToValueAtTime(1800, now + 0.1);
+        gain.gain.setValueAtTime(0.0001, now);
+        gain.gain.linearRampToValueAtTime(0.3, now + 0.05);
+        gain.gain.linearRampToValueAtTime(0.0001, now + 0.2);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start(now);
+        osc.stop(now + 0.25);
+      } catch (e) {}
+    }
+
+    // Lower pitched alarm for incoming buzzes
     function playBuzzTone() {
       try {
         audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
@@ -427,6 +444,15 @@
       
       const originalText = btnEl ? btnEl.textContent : null;
       if (btnEl) { btnEl.disabled = true; btnEl.textContent = 'BUZZED'; }
+
+      // NEW WORKFLOW: Auto-Arm caller's Comms when they buzz someone
+      if (!isCommsLive) {
+        await attemptMicRecovery();
+        if (hasMic) {
+           isCommsLive = true;
+           updateAudioState();
+        }
+      }
       
       try {
         await addDoc(collection(db, 'family_buzz'), {
@@ -519,14 +545,13 @@
           audio = document.createElement('audio');
           audio.id = 'audio-' + targetUid;
           audio.autoplay = true;
-          audio.playsInline = true; // REQUIRED FOR MOBILE TO ALLOW AUTOPLAY
-          audio.muted = !isSpeakerOn;
+          audio.playsInline = true; 
+          audio.muted = !isCommsLive;
           document.getElementById('audioContainer').appendChild(audio);
         }
         audio.srcObject = event.streams[0];
         
-        // Force audio to play once stream is attached
-        if (isSpeakerOn) audio.play().catch(e => console.warn("Audio blocked:", e));
+        if (isCommsLive) audio.play().catch(e => console.warn("Audio blocked:", e));
       };
 
       pc.onicecandidate = (event) => {
@@ -605,14 +630,20 @@
           const data = docSnap.data();
           const uid = docSnap.id;
           
-          // STRICT FILTER: If marked offline OR hasn't pinged server in 2 minutes, ignore them
-          if (!data.online || (now - data.lastSeen > 120000)) {
+          if (!data.online || (now - data.lastSeen > 60000)) {
             if (peers[uid] && peers[uid].connectionState !== 'closed') {
                peers[uid].close();
                delete peers[uid];
             }
             return;
           }
+
+          // NEW WORKFLOW: Check if this agent just went live and play the chirp
+          const wasLive = agentPresenceStates[uid];
+          if (data.speaking && !wasLive && uid !== myUid) {
+             playConnectBeep();
+          }
+          agentPresenceStates[uid] = data.speaking;
           
           const li = document.createElement('li');
           const nameWrap = document.createElement('div');
@@ -721,8 +752,8 @@
       updateAudioState();
 
       if (!hasMic) {
-        micToggleBtn.disabled = true;
-        micToggleBtn.textContent = "NO MIC (LISTEN ONLY)";
+        commsToggleBtn.disabled = true;
+        commsToggleBtn.textContent = "NO MIC (LISTEN ONLY)";
       }
 
       try {
@@ -730,13 +761,11 @@
           name: myName,
           online: true,
           speaking: false,
-          speakerOn: isSpeakerOn,
           hasMic: hasMic,
           lastSeen: Date.now()
         });
         hasJoined = true;
         
-        // HEARTBEAT TO PREVENT "GHOSTING" (Pings DB every 45 seconds)
         setInterval(() => {
             if (hasJoined) setDoc(doc(db, 'family_presence', myUid), { lastSeen: Date.now() }, { merge: true }).catch(()=>{});
         }, 45000);

@@ -138,7 +138,7 @@
   <canvas id="bgCanvas"></canvas>
 
   <div class="app">
-    <!-- Main Live Screen (Shows Immediately) -->
+    <!-- Main Live Screen -->
     <div id="channelScreen" style="display: flex; flex-direction: column; gap: 1.25rem;">
       <div class="header">
         <div class="logo">
@@ -342,10 +342,29 @@
       }
     }
 
+    // --- NEW: Master Function to End a Call ---
+    // If isLocalAction is true, we initiated the cut and need to tell others.
+    function endCall(isLocalAction = true) {
+      isCommsLive = false;
+      updateAudioState();
+      stopRinging();
+      cutCallBtn.style.display = 'none';
+      acceptCallBtn.style.display = 'none';
+
+      if (isLocalAction) {
+        // Broadcast the 'cut' signal so the other person's line goes dead too
+        addDoc(collection(db, 'family_signals'), { 
+          sender: myUid, 
+          receiver: 'all', 
+          type: 'cut', 
+          timestamp: Date.now() 
+        }).catch(()=>{});
+      }
+    }
+
     // Accepting the Call
     acceptCallBtn.onclick = async () => {
       stopRinging();
-      // Ensure audio context is awake after interaction
       try { audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)(); audioCtx.resume(); } catch(e){}
       await attemptMicRecovery();
       if(!hasMic) return;
@@ -356,11 +375,9 @@
       cutCallBtn.style.display = 'block';
     };
 
-    // Cutting the Call (Muting the line)
+    // Cutting the Call (Muting the line and ending it for everyone)
     cutCallBtn.onclick = () => {
-      isCommsLive = false;
-      updateAudioState();
-      cutCallBtn.style.display = 'none';
+      endCall(true); // Triggers local mute AND sends the network signal
     };
 
     const buzzCooldowns = {};
@@ -566,42 +583,64 @@
       }
     }
 
-    function listenForSignals() {
-      const q = query(collection(db, 'family_signals'), where('receiver', '==', myUid));
-      onSnapshot(q, (snapshot) => {
-        snapshot.docChanges().forEach(async (change) => {
-          if (change.type === 'added') {
-            const data = change.doc.data();
-            const sender = data.sender;
-            const payload = JSON.parse(data.payload);
-            deleteDoc(doc(db, 'family_signals', change.doc.id)).catch(() => {});
+    // Process all incoming WebRTC and Call State signals
+    function processSignal(change) {
+      if (change.type === 'added') {
+        const data = change.doc.data();
+        const sender = data.sender;
+        
+        // Ignore signals broadcasted by ourselves
+        if (sender === myUid) return;
 
-            try {
-              if (data.type === 'offer') {
-                const pc = createPeer(sender);
-                await pc.setRemoteDescription(new RTCSessionDescription(payload));
-                processQueuedCandidates(sender, pc);
-                const answer = await pc.createAnswer();
-                await pc.setLocalDescription(answer);
-                await addDoc(collection(db, 'family_signals'), { sender: myUid, receiver: sender, type: 'answer', payload: JSON.stringify(answer) });
-              } else if (data.type === 'answer') {
-                const pc = peers[sender];
-                if (pc) {
-                  await pc.setRemoteDescription(new RTCSessionDescription(payload));
-                  processQueuedCandidates(sender, pc);
-                }
-              } else if (data.type === 'candidate') {
-                const pc = peers[sender];
-                const candidate = new RTCIceCandidate(payload);
-                if (pc && pc.remoteDescription) await pc.addIceCandidate(candidate);
-                else {
-                  candidateQueues[sender] = candidateQueues[sender] || [];
-                  candidateQueues[sender].push(candidate);
-                }
-              }
-            } catch (e) {}
+        // Catch the newly implemented "Cut" command
+        if (data.type === 'cut') {
+          endCall(false); // Run end call logic, but don't re-broadcast it
+          deleteDoc(doc(db, 'family_signals', change.doc.id)).catch(() => {});
+          return;
+        }
+
+        const payload = data.payload ? JSON.parse(data.payload) : null;
+        deleteDoc(doc(db, 'family_signals', change.doc.id)).catch(() => {});
+
+        try {
+          if (data.type === 'offer') {
+            const pc = createPeer(sender);
+            pc.setRemoteDescription(new RTCSessionDescription(payload)).then(() => {
+              processQueuedCandidates(sender, pc);
+              return pc.createAnswer();
+            }).then(answer => {
+              pc.setLocalDescription(answer);
+              addDoc(collection(db, 'family_signals'), { sender: myUid, receiver: sender, type: 'answer', payload: JSON.stringify(answer) });
+            });
+          } else if (data.type === 'answer') {
+            const pc = peers[sender];
+            if (pc) {
+              pc.setRemoteDescription(new RTCSessionDescription(payload)).then(() => processQueuedCandidates(sender, pc));
+            }
+          } else if (data.type === 'candidate') {
+            const pc = peers[sender];
+            const candidate = new RTCIceCandidate(payload);
+            if (pc && pc.remoteDescription) pc.addIceCandidate(candidate);
+            else {
+              candidateQueues[sender] = candidateQueues[sender] || [];
+              candidateQueues[sender].push(candidate);
+            }
           }
-        });
+        } catch (e) {}
+      }
+    }
+
+    function listenForSignals() {
+      // Listen for signals sent directly to this ID
+      const qDirect = query(collection(db, 'family_signals'), where('receiver', '==', myUid));
+      onSnapshot(qDirect, (snapshot) => {
+        snapshot.docChanges().forEach(processSignal);
+      });
+      
+      // Listen for signals broadcasted to all users (like the new 'cut' command)
+      const qGlobal = query(collection(db, 'family_signals'), where('receiver', '==', 'all'));
+      onSnapshot(qGlobal, (snapshot) => {
+        snapshot.docChanges().forEach(processSignal);
       });
     }
 

@@ -60,13 +60,32 @@
     .logo-icon { width: 36px; height: 36px; background: transparent; border: 2px solid var(--text); display: flex; align-items: center; justify-content: center; }
     .logo-icon svg { color: var(--text); }
     h1 { font-family: 'IBM Plex Mono', monospace; font-size: 1.4rem; font-weight: 600; letter-spacing: 0.15em; text-transform: uppercase; }
-    .subtitle { font-size: 0.85rem; color: var(--muted); font-family: 'IBM Plex Mono', monospace; letter-spacing: 0.05em; text-transform: uppercase; }
+    
+    /* Big Editable ID Input */
+    .big-id-input {
+      background: transparent;
+      border: none;
+      border-bottom: 2px dashed var(--muted);
+      color: var(--text);
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 3rem;
+      font-weight: 600;
+      text-align: center;
+      width: 100%;
+      margin-top: 1rem;
+      padding: 0.2rem;
+      outline: none;
+      text-transform: uppercase;
+      transition: all 0.2s;
+    }
+    .big-id-input:focus { border-bottom-color: var(--text); }
+    .big-id-input::placeholder { color: var(--muted); font-size: 1.5rem; }
 
     .card { background: var(--bg); border: 1px solid var(--border); padding: 1.5rem; }
     .card-label { font-family: 'IBM Plex Mono', monospace; font-size: 0.75rem; font-weight: 600; letter-spacing: 0.15em; text-transform: uppercase; margin-bottom: 1.25rem; display: flex; align-items: center; gap: 0.6rem; color: var(--text); }
     .card-label::before { content: ''; display: inline-block; width: 4px; height: 14px; background: var(--text); }
     
-    .status-bar { background: var(--bg); border: 1px solid var(--border); padding: 1rem; display: flex; align-items: center; gap: 0.75rem; font-family: 'IBM Plex Mono', monospace; font-size: 0.85rem; }
+    .status-bar { background: var(--bg); border: 1px solid var(--border); padding: 1rem; display: flex; align-items: center; justify-content: center; gap: 0.75rem; font-family: 'IBM Plex Mono', monospace; font-size: 0.85rem; }
     .status-dot { width: 10px; height: 10px; background: transparent; border: 1px solid var(--muted); flex-shrink: 0; }
     .status-dot.connected { background: var(--text); border-color: var(--text); }
     .status-dot.error { background: transparent; border: 1px dashed var(--muted); }
@@ -78,7 +97,6 @@
     .btn:active:not(:disabled) { transform: translateY(1px); }
     .btn:disabled { background: transparent; color: var(--muted); border-color: var(--border-dim); cursor: not-allowed; }
 
-    /* Action Buttons styling */
     #acceptCallBtn { background: var(--text); color: var(--bg); font-size: 1.1rem; height: 70px; display: none; box-shadow: 0 0 20px rgba(255,255,255,0.4); animation: pulseButton 1s infinite alternate; }
     #cutCallBtn { background: transparent; color: var(--text); font-size: 1.1rem; height: 70px; display: none; border-color: #ff4444; }
     #cutCallBtn:hover { background: #ff4444; color: white; }
@@ -120,32 +138,27 @@
   <canvas id="bgCanvas"></canvas>
 
   <div class="app">
-    <div class="header">
-      <div class="logo">
-        <div class="logo-icon">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter">
-            <path d="M12 1v10M12 11a3 3 0 0 0-3 3v4a3 3 0 0 0 6 0v-4a3 3 0 0 0-3-3z"/>
-            <path d="M19 14v2a7 7 0 0 1-14 0v-2"/>
-            <line x1="12" y1="23" x2="12" y2="23"/>
-            <line x1="8" y1="23" x2="16" y2="23"/>
-          </svg>
+    <!-- Main Live Screen (Shows Immediately) -->
+    <div id="channelScreen" style="display: flex; flex-direction: column; gap: 1.25rem;">
+      <div class="header">
+        <div class="logo">
+          <div class="logo-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter">
+              <path d="M12 1v10M12 11a3 3 0 0 0-3 3v4a3 3 0 0 0 6 0v-4a3 3 0 0 0-3-3z"/>
+              <path d="M19 14v2a7 7 0 0 1-14 0v-2"/>
+              <line x1="12" y1="23" x2="12" y2="23"/>
+              <line x1="8" y1="23" x2="16" y2="23"/>
+            </svg>
+          </div>
+          <h1>LIVE LINE</h1>
         </div>
-        <h1>LIVE LINE</h1>
+        <!-- BIG EDITABLE ID -->
+        <input type="text" id="myIdInput" class="big-id-input" placeholder="INIT...">
       </div>
-      <p class="subtitle">Secure Channel // Terminal 01</p>
-    </div>
 
-    <!-- Single-Tap Entry Screen -->
-    <div id="loginScreen" class="card" style="text-align: center; cursor: pointer;">
-      <div class="card-label" style="justify-content: center;">System Ready</div>
-      <button class="btn" id="joinBtn" style="height: 120px; font-size: 1.2rem; animation: pulseButton 1s infinite alternate;">TAP TO ENTER LIVE LINE</button>
-    </div>
-
-    <!-- Main Live Screen -->
-    <div id="channelScreen" style="display: none; flex-direction: column; gap: 1.25rem;">
       <div class="status-bar" id="statusBar">
         <div class="status-dot connected"></div>
-        <span id="statusText">STANDBY - MUTED</span>
+        <span id="statusText">CONNECTING...</span>
       </div>
 
       <!-- Controls Card -->
@@ -207,7 +220,7 @@
   <!-- Core App Logic -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
-    import { getFirestore, collection, doc, setDoc, onSnapshot, addDoc, deleteDoc, query, where, limit, getDoc, getDocs } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+    import { getFirestore, collection, doc, setDoc, onSnapshot, addDoc, deleteDoc, query, where, getDoc, getDocs } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyCX-bZLDHy-6wxuc5b8YInV_Mr7uYOTmgk",
@@ -259,6 +272,21 @@
     const acceptCallBtn = document.getElementById('acceptCallBtn');
     const cutCallBtn = document.getElementById('cutCallBtn');
     const statusText = document.getElementById('statusText');
+    const myIdInput = document.getElementById('myIdInput');
+
+    // Handle manual edits to the assigned ID
+    myIdInput.addEventListener('change', (e) => {
+      const newName = e.target.value.trim();
+      if (newName) {
+        myName = newName;
+        localStorage.setItem('myName', myName);
+        if (hasJoined) {
+          setDoc(doc(db, 'family_presence', myUid), { name: myName }, { merge: true });
+        }
+      } else {
+        e.target.value = myName; // Revert if they clear it entirely
+      }
+    });
 
     function setupKeepAliveAudio() {
       if (!keepAliveAudio) {
@@ -317,6 +345,8 @@
     // Accepting the Call
     acceptCallBtn.onclick = async () => {
       stopRinging();
+      // Ensure audio context is awake after interaction
+      try { audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)(); audioCtx.resume(); } catch(e){}
       await attemptMicRecovery();
       if(!hasMic) return;
       isCommsLive = true;
@@ -330,7 +360,6 @@
     cutCallBtn.onclick = () => {
       isCommsLive = false;
       updateAudioState();
-      
       cutCallBtn.style.display = 'none';
     };
 
@@ -428,6 +457,8 @@
     }
 
     async function sendBuzz(targetUid, btnEl) {
+      try { audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)(); audioCtx.resume(); } catch(e){}
+      
       const now = Date.now();
       if (buzzCooldowns[targetUid] && now < buzzCooldowns[targetUid]) return;
       buzzCooldowns[targetUid] = now + BUZZ_COOLDOWN_MS;
@@ -679,11 +710,8 @@
       } catch (e) {}
     }
 
-    document.getElementById('joinBtn').onclick = async () => {
-      const btn = document.getElementById('joinBtn');
-      btn.disabled = true;
-      btn.textContent = "ASSIGNING ID & UPLINKING...";
-
+    // Auto-initialize when the app loads
+    window.addEventListener('DOMContentLoaded', async () => {
       try { audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {}
 
       // 1. Fetch current users to determine the next ID
@@ -702,14 +730,15 @@
           }
         });
         
-        // Generate a 3-digit ID (e.g., 001, 002)
         const nextIdNumber = maxId + 1;
         myName = String(nextIdNumber).padStart(3, '0');
         localStorage.setItem('myName', myName);
+        myIdInput.value = myName;
 
       } catch (error) {
         console.error("Failed to assign ID, defaulting to 001", error);
         myName = "001"; 
+        myIdInput.value = myName;
       }
 
       // 2. Initialize Microphone - Go Live Immediately
@@ -750,19 +779,16 @@
         window.addEventListener('beforeunload', () => {
           setDoc(doc(db, 'family_presence', myUid), { name: myName, online: false, speaking: false }, { merge: true });
         });
-
-        document.getElementById('loginScreen').style.display = 'none';
-        document.getElementById('channelScreen').style.display = 'flex';
         
-        // Ensure CUT button is visible since line is live upon entry
-        cutCallBtn.style.display = 'block';
-        acceptCallBtn.style.display = 'none';
+        if(isCommsLive) {
+           cutCallBtn.style.display = 'block';
+           acceptCallBtn.style.display = 'none';
+        }
         
       } catch (e) {
-        btn.disabled = false;
-        btn.textContent = "TAP TO ENTER LIVE LINE";
+        statusText.textContent = "UPLINK FAILED. RETRY.";
       }
-    };
+    });
   </script>
 </body>
 </html>

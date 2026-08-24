@@ -73,10 +73,6 @@
     .status-dot.speaking { animation: pulseSpeak 0.8s ease-in-out infinite; }
     @keyframes pulseSpeak { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.3; transform: scale(1.2); } }
     
-    input[type="text"] { width: 100%; background: transparent; border: 1px solid var(--border); padding: 1rem; font-family: 'IBM Plex Mono', monospace; font-size: 1rem; color: var(--text); outline: none; margin-bottom: 1rem; transition: all 0.2s; text-transform: uppercase; }
-    input[type="text"]:focus { border-color: var(--text); }
-    input[type="text"]::placeholder { color: var(--muted); }
-
     .btn { background: transparent; color: var(--text); border: 1px solid var(--text); padding: 1rem; font-family: 'IBM Plex Mono', monospace; font-size: 0.9rem; font-weight: 600; cursor: pointer; letter-spacing: 0.1em; width: 100%; transition: all 0.2s ease; text-transform: uppercase; margin-bottom: 10px; }
     .btn:hover:not(:disabled) { background: var(--text); color: var(--bg); }
     .btn:active:not(:disabled) { transform: translateY(1px); }
@@ -139,11 +135,10 @@
       <p class="subtitle">Secure Channel // Terminal 01</p>
     </div>
 
-    <!-- Login Screen -->
-    <div id="loginScreen" class="card">
-      <div class="card-label">Identity Auth</div>
-      <input type="text" id="userNameInput" placeholder="ENTER CALL SIGN">
-      <button class="btn" id="joinBtn">INITIALIZE UPLINK</button>
+    <!-- Single-Tap Entry Screen -->
+    <div id="loginScreen" class="card" style="text-align: center; cursor: pointer;">
+      <div class="card-label" style="justify-content: center;">System Ready</div>
+      <button class="btn" id="joinBtn" style="height: 120px; font-size: 1.2rem; animation: pulseButton 1s infinite alternate;">TAP TO ENTER LIVE LINE</button>
     </div>
 
     <!-- Main Live Screen -->
@@ -249,9 +244,6 @@
     localStorage.setItem('myUid', myUid);
     let myName = localStorage.getItem('myName') || "";
 
-    const userNameInput = document.getElementById('userNameInput');
-    if (myName) userNameInput.value = myName;
-
     let localStream = null;
     let keepAliveAudio = null;
     const peers = {};
@@ -261,7 +253,7 @@
     let isCommsLive = false; 
     let hasJoined = false;
     let hasMic = false;
-    let ringingInterval = null; // Used to track continuous buzzing
+    let ringingInterval = null; 
     
     const waveform = document.getElementById('waveform');
     const acceptCallBtn = document.getElementById('acceptCallBtn');
@@ -340,7 +332,6 @@
       updateAudioState();
       
       cutCallBtn.style.display = 'none';
-      // System returns to standby, WebRTC connections remain active
     };
 
     const buzzCooldowns = {};
@@ -404,9 +395,8 @@
     }
 
     function startRinging(fromName) {
-      if (ringingInterval) return; // Already ringing
+      if (ringingInterval) return; 
       
-      // Auto-cut current live session if ringing
       if (isCommsLive) {
          isCommsLive = false;
          updateAudioState();
@@ -418,7 +408,6 @@
       acceptCallBtn.style.display = 'block';
       cutCallBtn.style.display = 'none';
 
-      // Ring immediately, then loop every 3 seconds
       const triggerRing = () => {
         playBuzzTone();
         if (navigator.vibrate) navigator.vibrate([400, 150, 400, 150, 400]);
@@ -446,7 +435,6 @@
       const originalText = btnEl ? btnEl.textContent : null;
       if (btnEl) { btnEl.disabled = true; btnEl.textContent = 'TX...'; }
       
-      // Auto-live when you buzz someone
       if (!isCommsLive) {
         await attemptMicRecovery();
         if (hasMic) {
@@ -513,7 +501,7 @@
           audio.id = 'audio-' + targetUid;
           audio.autoplay = true;
           audio.playsInline = true; 
-          audio.muted = !isCommsLive; // Initially muted based on state
+          audio.muted = !isCommsLive; 
           document.getElementById('audioContainer').appendChild(audio);
         }
         audio.srcObject = event.streams[0];
@@ -692,37 +680,59 @@
     }
 
     document.getElementById('joinBtn').onclick = async () => {
-      const name = userNameInput.value.trim();
-      if (!name) return alert("AUTH REQUIRED.");
-      
-      localStorage.setItem('myName', name);
-      myName = name;
-
       const btn = document.getElementById('joinBtn');
       btn.disabled = true;
-      btn.textContent = "INITIALIZING...";
+      btn.textContent = "ASSIGNING ID & UPLINKING...";
 
       try { audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {}
 
+      // 1. Fetch current users to determine the next ID
+      try {
+        const presenceSnap = await getDocs(collection(db, 'family_presence'));
+        let maxId = 0;
+        const now = Date.now();
+        
+        presenceSnap.forEach((docSnap) => {
+          const data = docSnap.data();
+          if (data.online && (now - data.lastSeen < 60000) && data.name) {
+            const num = parseInt(data.name);
+            if (!isNaN(num) && num > maxId) {
+              maxId = num;
+            }
+          }
+        });
+        
+        // Generate a 3-digit ID (e.g., 001, 002)
+        const nextIdNumber = maxId + 1;
+        myName = String(nextIdNumber).padStart(3, '0');
+        localStorage.setItem('myName', myName);
+
+      } catch (error) {
+        console.error("Failed to assign ID, defaulting to 001", error);
+        myName = "001"; 
+      }
+
+      // 2. Initialize Microphone - Go Live Immediately
       try {
         localStream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
-        // Start muted by default, waiting for a buzz or for user to buzz someone
-        localStream.getAudioTracks().forEach(t => t.enabled = false);
+        localStream.getAudioTracks().forEach(t => t.enabled = true);
         hasMic = true;
-        isCommsLive = false; 
+        isCommsLive = true; 
       } catch (e) {
         localStream = null;
         hasMic = false;
+        isCommsLive = false;
       }
 
       setupKeepAliveAudio();
       updateAudioState();
 
+      // 3. Register Presence and enter channel
       try {
         await setDoc(doc(db, 'family_presence', myUid), {
           name: myName,
           online: true,
-          speaking: false,
+          speaking: isCommsLive,
           hasMic: hasMic,
           lastSeen: Date.now()
         });
@@ -744,9 +754,13 @@
         document.getElementById('loginScreen').style.display = 'none';
         document.getElementById('channelScreen').style.display = 'flex';
         
+        // Ensure CUT button is visible since line is live upon entry
+        cutCallBtn.style.display = 'block';
+        acceptCallBtn.style.display = 'none';
+        
       } catch (e) {
         btn.disabled = false;
-        btn.textContent = "INITIALIZE UPLINK";
+        btn.textContent = "TAP TO ENTER LIVE LINE";
       }
     };
   </script>

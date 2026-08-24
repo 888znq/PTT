@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Live Line - Tactical Voice</title>
+  <title>Live Line - Tactical A/V</title>
   
   <link rel="manifest" href="./manifest.json">
   <meta name="theme-color" content="#000432">
@@ -61,7 +61,6 @@
     .logo-icon svg { color: var(--text); }
     h1 { font-family: 'IBM Plex Mono', monospace; font-size: 1.4rem; font-weight: 600; letter-spacing: 0.15em; text-transform: uppercase; }
     
-    /* Big Editable ID Input */
     .big-id-input {
       background: transparent;
       border: none;
@@ -102,6 +101,14 @@
     #cutCallBtn:hover { background: #ff4444; color: white; }
     
     @keyframes pulseButton { 0% { transform: scale(0.98); } 100% { transform: scale(1.02); } }
+
+    /* Video UI Styles */
+    .video-grid { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
+    .video-wrapper { position: relative; border: 1px solid var(--border); width: 45%; aspect-ratio: 3/4; background: #000; overflow: hidden; }
+    .video-wrapper.active { border-color: var(--text); }
+    .video-wrapper video { width: 100%; height: 100%; object-fit: cover; }
+    .video-wrapper video.mirrored { transform: scaleX(-1); }
+    .video-label { position: absolute; bottom: 4px; left: 4px; background: var(--bg); border: 1px solid var(--text); font-family: 'IBM Plex Mono', monospace; font-size: 0.6rem; padding: 2px 4px; color: var(--text); z-index: 2; }
 
     .members-list { list-style: none; padding: 0; margin: 0; }
     .members-list li { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; font-family: 'IBM Plex Mono', monospace; font-size: 0.9rem; padding-bottom: 12px; border-bottom: 1px solid var(--border-dim); }
@@ -173,6 +180,17 @@
         <button id="cutCallBtn" class="btn">CUT CALL (MUTE)</button>
         <button id="buzzAllBtn" class="btn">TRANSMIT GLOBAL BUZZ</button>
       </div>
+      
+      <!-- Video Feeds Card -->
+      <div class="card" id="videoCard" style="display: none;">
+        <div class="card-label">Visual Uplink</div>
+        <div class="video-grid" id="videoGrid">
+          <div class="video-wrapper" id="localVideoWrapper">
+            <video id="localVideo" class="mirrored" autoplay playsinline muted></video>
+            <div class="video-label">SELF</div>
+          </div>
+        </div>
+      </div>
 
       <!-- Network Presence Card -->
       <div class="card">
@@ -182,8 +200,6 @@
     </div>
   </div>
 
-  <div id="audioContainer" style="display:none;"></div>
-  
   <div id="buzzToast" class="buzz-toast">
     <span id="buzzToastText">BUZZ</span>
   </div>
@@ -265,7 +281,7 @@
 
     let isCommsLive = false; 
     let hasJoined = false;
-    let hasMic = false;
+    let hasMedia = false;
     let ringingInterval = null; 
     
     const waveform = document.getElementById('waveform');
@@ -273,6 +289,8 @@
     const cutCallBtn = document.getElementById('cutCallBtn');
     const statusText = document.getElementById('statusText');
     const myIdInput = document.getElementById('myIdInput');
+    const videoCard = document.getElementById('videoCard');
+    const localVideo = document.getElementById('localVideo');
 
     // Handle manual edits to the assigned ID
     myIdInput.addEventListener('change', (e) => {
@@ -284,7 +302,7 @@
           setDoc(doc(db, 'family_presence', myUid), { name: myName }, { merge: true });
         }
       } else {
-        e.target.value = myName; // Revert if they clear it entirely
+        e.target.value = myName; 
       }
     });
 
@@ -296,39 +314,51 @@
       }
     }
 
-    async function attemptMicRecovery() {
-       if (!hasMic) {
+    async function attemptMediaRecovery() {
+       if (!hasMedia) {
         try {
-          localStream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
-          hasMic = true;
-          Object.values(peers).forEach(pc => {
-            localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
-          });
+          // Attempt Video + Audio first
+          localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+          localVideo.srcObject = localStream;
+          hasMedia = true;
         } catch (e) {
-          alert("MIC DENIED BY OS SETTINGS.");
+          try {
+            // Fallback to Audio only if camera denied or absent
+            localStream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
+            hasMedia = true;
+          } catch(err) {
+            alert("A/V DENIED BY OS SETTINGS.");
+            return;
+          }
         }
+        
+        Object.values(peers).forEach(pc => {
+          localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+        });
       }
     }
 
-    function updateAudioState() {
+    function updateMediaState() {
       if (localStream) {
-        localStream.getAudioTracks().forEach(t => t.enabled = isCommsLive);
+        localStream.getTracks().forEach(t => t.enabled = isCommsLive);
       }
       
-      const remoteAudios = document.querySelectorAll('#audioContainer audio');
-      remoteAudios.forEach(a => {
-        a.muted = !isCommsLive;
+      const remoteVideos = document.querySelectorAll('#videoGrid video:not(#localVideo)');
+      remoteVideos.forEach(v => {
+        v.muted = !isCommsLive;
         if (isCommsLive) {
-           a.play().catch(() => {}); 
+           v.play().catch(() => {}); 
         }
       });
 
       if (isCommsLive) {
         waveform.classList.add('active');
-        statusText.textContent = "LINE LIVE";
+        videoCard.style.display = 'block';
+        statusText.textContent = "LINE LIVE (A/V)";
         document.querySelector('.status-dot').classList.add('speaking');
       } else {
         waveform.classList.remove('active');
+        videoCard.style.display = 'none'; // Hide feeds to save space when cut
         statusText.textContent = "STANDBY - MUTED";
         document.querySelector('.status-dot').classList.remove('speaking');
       }
@@ -342,17 +372,14 @@
       }
     }
 
-    // --- NEW: Master Function to End a Call ---
-    // If isLocalAction is true, we initiated the cut and need to tell others.
     function endCall(isLocalAction = true) {
       isCommsLive = false;
-      updateAudioState();
+      updateMediaState();
       stopRinging();
       cutCallBtn.style.display = 'none';
       acceptCallBtn.style.display = 'none';
 
       if (isLocalAction) {
-        // Broadcast the 'cut' signal so the other person's line goes dead too
         addDoc(collection(db, 'family_signals'), { 
           sender: myUid, 
           receiver: 'all', 
@@ -366,18 +393,18 @@
     acceptCallBtn.onclick = async () => {
       stopRinging();
       try { audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)(); audioCtx.resume(); } catch(e){}
-      await attemptMicRecovery();
-      if(!hasMic) return;
+      await attemptMediaRecovery();
+      if(!hasMedia) return;
       isCommsLive = true;
-      updateAudioState();
+      updateMediaState();
       
       acceptCallBtn.style.display = 'none';
       cutCallBtn.style.display = 'block';
     };
 
-    // Cutting the Call (Muting the line and ending it for everyone)
+    // Cutting the Call
     cutCallBtn.onclick = () => {
-      endCall(true); // Triggers local mute AND sends the network signal
+      endCall(true); 
     };
 
     const buzzCooldowns = {};
@@ -445,7 +472,7 @@
       
       if (isCommsLive) {
          isCommsLive = false;
-         updateAudioState();
+         updateMediaState();
       }
 
       showBuzzToast('INCOMING PING: ' + fromName);
@@ -484,10 +511,10 @@
       if (btnEl) { btnEl.disabled = true; btnEl.textContent = 'TX...'; }
       
       if (!isCommsLive) {
-        await attemptMicRecovery();
-        if (hasMic) {
+        await attemptMediaRecovery();
+        if (hasMedia) {
            isCommsLive = true;
-           updateAudioState();
+           updateMediaState();
            cutCallBtn.style.display = 'block';
            acceptCallBtn.style.display = 'none';
            stopRinging();
@@ -543,18 +570,32 @@
       }
 
       pc.ontrack = (event) => {
-        let audio = document.getElementById('audio-' + targetUid);
-        if (!audio) {
-          audio = document.createElement('audio');
-          audio.id = 'audio-' + targetUid;
-          audio.autoplay = true;
-          audio.playsInline = true; 
-          audio.muted = !isCommsLive; 
-          document.getElementById('audioContainer').appendChild(audio);
+        // Create remote video wrapper if it doesn't exist
+        let wrapper = document.getElementById('video-wrapper-' + targetUid);
+        if (!wrapper) {
+          wrapper = document.createElement('div');
+          wrapper.className = 'video-wrapper active';
+          wrapper.id = 'video-wrapper-' + targetUid;
+          
+          const vid = document.createElement('video');
+          vid.id = 'video-' + targetUid;
+          vid.autoplay = true;
+          vid.playsInline = true;
+          
+          const label = document.createElement('div');
+          label.className = 'video-label';
+          label.textContent = 'NODE ' + targetUid;
+          
+          wrapper.appendChild(vid);
+          wrapper.appendChild(label);
+          document.getElementById('videoGrid').appendChild(wrapper);
         }
-        audio.srcObject = event.streams[0];
         
-        if (isCommsLive) audio.play().catch(() => {});
+        const videoEl = document.getElementById('video-' + targetUid);
+        videoEl.srcObject = event.streams[0];
+        videoEl.muted = !isCommsLive; 
+        
+        if (isCommsLive) videoEl.play().catch(() => {});
       };
 
       pc.onicecandidate = (event) => {
@@ -564,7 +605,10 @@
       };
 
       pc.onconnectionstatechange = () => {
-        if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
+        if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed' || pc.connectionState === 'closed') {
+          const wrapper = document.getElementById('video-wrapper-' + targetUid);
+          if (wrapper) wrapper.remove();
+          
           if (peers[targetUid]) {
             peers[targetUid].close();
             delete peers[targetUid];
@@ -583,18 +627,15 @@
       }
     }
 
-    // Process all incoming WebRTC and Call State signals
     function processSignal(change) {
       if (change.type === 'added') {
         const data = change.doc.data();
         const sender = data.sender;
         
-        // Ignore signals broadcasted by ourselves
         if (sender === myUid) return;
 
-        // Catch the newly implemented "Cut" command
         if (data.type === 'cut') {
-          endCall(false); // Run end call logic, but don't re-broadcast it
+          endCall(false); 
           deleteDoc(doc(db, 'family_signals', change.doc.id)).catch(() => {});
           return;
         }
@@ -631,13 +672,11 @@
     }
 
     function listenForSignals() {
-      // Listen for signals sent directly to this ID
       const qDirect = query(collection(db, 'family_signals'), where('receiver', '==', myUid));
       onSnapshot(qDirect, (snapshot) => {
         snapshot.docChanges().forEach(processSignal);
       });
       
-      // Listen for signals broadcasted to all users (like the new 'cut' command)
       const qGlobal = query(collection(db, 'family_signals'), where('receiver', '==', 'all'));
       onSnapshot(qGlobal, (snapshot) => {
         snapshot.docChanges().forEach(processSignal);
@@ -655,7 +694,11 @@
           const data = docSnap.data();
           const uid = docSnap.id;
           
+          // Clear dead feeds if someone closes the app
           if (!data.online || (now - data.lastSeen > 60000)) {
+            const wrapper = document.getElementById('video-wrapper-' + uid);
+            if (wrapper) wrapper.remove();
+            
             if (peers[uid] && peers[uid].connectionState !== 'closed') {
                peers[uid].close();
                delete peers[uid];
@@ -780,20 +823,30 @@
         myIdInput.value = myName;
       }
 
-      // 2. Initialize Microphone - Go Live Immediately
+      // 2. Initialize Media (Video + Audio)
       try {
-        localStream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
-        localStream.getAudioTracks().forEach(t => t.enabled = true);
-        hasMic = true;
-        isCommsLive = true; 
+        localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        localVideo.srcObject = localStream;
+        hasMedia = true;
       } catch (e) {
-        localStream = null;
-        hasMic = false;
-        isCommsLive = false;
+        // Fallback to audio if video is blocked
+        try {
+           localStream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
+           hasMedia = true;
+        } catch(err) {
+           hasMedia = false;
+        }
+      }
+
+      if (localStream) {
+         localStream.getTracks().forEach(t => t.enabled = true);
+         isCommsLive = true;
+      } else {
+         isCommsLive = false;
       }
 
       setupKeepAliveAudio();
-      updateAudioState();
+      updateMediaState();
 
       // 3. Register Presence and enter channel
       try {
@@ -801,7 +854,7 @@
           name: myName,
           online: true,
           speaking: isCommsLive,
-          hasMic: hasMic,
+          hasMic: hasMedia,
           lastSeen: Date.now()
         });
         hasJoined = true;

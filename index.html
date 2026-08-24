@@ -77,25 +77,28 @@
     input[type="text"]:focus { border-color: var(--text); }
     input[type="text"]::placeholder { color: var(--muted); }
 
-    .btn { background: transparent; color: var(--text); border: 1px solid var(--text); padding: 1rem; font-family: 'IBM Plex Mono', monospace; font-size: 0.9rem; font-weight: 600; cursor: pointer; letter-spacing: 0.1em; width: 100%; transition: all 0.2s ease; text-transform: uppercase; }
+    .btn { background: transparent; color: var(--text); border: 1px solid var(--text); padding: 1rem; font-family: 'IBM Plex Mono', monospace; font-size: 0.9rem; font-weight: 600; cursor: pointer; letter-spacing: 0.1em; width: 100%; transition: all 0.2s ease; text-transform: uppercase; margin-bottom: 10px; }
     .btn:hover:not(:disabled) { background: var(--text); color: var(--bg); }
     .btn:active:not(:disabled) { transform: translateY(1px); }
     .btn:disabled { background: transparent; color: var(--muted); border-color: var(--border-dim); cursor: not-allowed; }
 
-    .toggle-btn { height: 90px; font-size: 1.1rem; display: flex; align-items: center; justify-content: center; gap: 0.75rem; margin-bottom: 1rem; width: 100%; letter-spacing: 0.05em; border: 1px solid var(--border); color: var(--text); transition: all 0.1s; }
-    .toggle-btn.active-comms { background: var(--text); color: var(--bg); border-color: var(--text); font-weight: 600; box-shadow: 0 0 20px rgba(255,255,255,0.2); }
-    .toggle-btn.muted { background: transparent; }
+    /* Action Buttons styling */
+    #acceptCallBtn { background: var(--text); color: var(--bg); font-size: 1.1rem; height: 70px; display: none; box-shadow: 0 0 20px rgba(255,255,255,0.4); animation: pulseButton 1s infinite alternate; }
+    #cutCallBtn { background: transparent; color: var(--text); font-size: 1.1rem; height: 70px; display: none; border-color: #ff4444; }
+    #cutCallBtn:hover { background: #ff4444; color: white; }
+    
+    @keyframes pulseButton { 0% { transform: scale(0.98); } 100% { transform: scale(1.02); } }
 
     .members-list { list-style: none; padding: 0; margin: 0; }
     .members-list li { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; font-family: 'IBM Plex Mono', monospace; font-size: 0.9rem; padding-bottom: 12px; border-bottom: 1px solid var(--border-dim); }
     .members-list li:last-child { margin-bottom: 0; padding-bottom: 0; border-bottom: none; }
     .member-name { display: flex; align-items: center; gap: 12px; text-transform: uppercase; }
     
-    .buzz-member-btn { background: transparent; border: 1px solid var(--text); color: var(--text); padding: 0.4rem 0.8rem; font-family: 'IBM Plex Mono', monospace; font-size: 0.75rem; font-weight: 600; cursor: pointer; letter-spacing: 0.05em; width: auto; transition: all 0.15s ease; }
+    .buzz-member-btn { background: transparent; border: 1px solid var(--text); color: var(--text); padding: 0.4rem 0.8rem; font-family: 'IBM Plex Mono', monospace; font-size: 0.75rem; font-weight: 600; cursor: pointer; letter-spacing: 0.05em; width: auto; transition: all 0.15s ease; margin-bottom: 0; }
     .buzz-member-btn:hover:not(:disabled) { background: var(--text); color: var(--bg); }
     .buzz-member-btn:disabled { opacity: 0.3; cursor: not-allowed; border-color: var(--border); color: var(--muted); }
     
-    body.incoming-buzz { animation: buzzFlash 0.5s ease-in-out 6; }
+    body.incoming-buzz { animation: buzzFlash 1s ease-in-out infinite; }
     @keyframes buzzFlash { 0%, 100% { background: var(--bg); } 50% { background: var(--text); color: var(--bg); } }
     
     .buzz-toast { position: fixed; top: 1.5rem; left: 50%; transform: translateX(-50%); z-index: 50; background: var(--text); color: var(--bg); border: none; padding: 1rem 1.5rem; font-family: 'IBM Plex Mono', monospace; font-size: 0.9rem; font-weight: 600; display: none; align-items: center; text-transform: uppercase; }
@@ -147,18 +150,19 @@
     <div id="channelScreen" style="display: none; flex-direction: column; gap: 1.25rem;">
       <div class="status-bar" id="statusBar">
         <div class="status-dot connected"></div>
-        <span id="statusText">CONNECTION ESTABLISHED</span>
+        <span id="statusText">STANDBY - MUTED</span>
       </div>
 
       <!-- Controls Card -->
       <div class="card" style="text-align: center;">
-        <div class="card-label">Master Audio Override</div>
+        <div class="card-label">Comm Link</div>
         
         <div class="waveform" id="waveform">
           <span></span><span></span><span></span><span></span><span></span>
         </div>
 
-        <button id="commsToggleBtn" class="btn toggle-btn muted">COMMS: MUTED<br><span style="font-size: 0.75rem; opacity: 0.6; margin-top: 4px;">TAP TO ARM</span></button>
+        <button id="acceptCallBtn" class="btn">ACCEPT CALL</button>
+        <button id="cutCallBtn" class="btn">CUT CALL (MUTE)</button>
         <button id="buzzAllBtn" class="btn">TRANSMIT GLOBAL BUZZ</button>
       </div>
 
@@ -194,7 +198,6 @@
       const NODE_COUNT = Math.min(70, Math.floor((window.innerWidth * window.innerHeight) / 14000)), LINK_DIST = 140, nodes = [];
       for (let i = 0; i < NODE_COUNT; i++) nodes.push({ x: Math.random() * width, y: Math.random() * height, vx: (Math.random() - 0.5) * 0.25, vy: (Math.random() - 0.5) * 0.25, size: 2 + Math.random() * 2.5, alpha: 0.3 + Math.random() * 0.3 });
       
-      // SET TO PURE WHITE
       const colorAccent = [1.0, 1.0, 1.0], pointPosBuffer = gl.createBuffer(), pointSizeBuffer = gl.createBuffer(), pointAlphaBuffer = gl.createBuffer(), linePosBuffer = gl.createBuffer(), lineAlphaBuffer = gl.createBuffer();
       const pointAttribs = { aPosition: gl.getAttribLocation(pointProgram, 'aPosition'), aSize: gl.getAttribLocation(pointProgram, 'aSize'), aAlpha: gl.getAttribLocation(pointProgram, 'aAlpha') }, pointUniforms = { uResolution: gl.getUniformLocation(pointProgram, 'uResolution'), uColor: gl.getUniformLocation(pointProgram, 'uColor') }, lineAttribs = { aPosition: gl.getAttribLocation(lineProgram, 'aPosition'), aAlpha: gl.getAttribLocation(lineProgram, 'aAlpha') }, lineUniforms = { uResolution: gl.getUniformLocation(lineProgram, 'uResolution'), uColor: gl.getUniformLocation(lineProgram, 'uColor') };
       function update() { for (const n of nodes) { n.x += n.vx; n.y += n.vy; if (n.x < 0 || n.x > width) n.vx *= -1; if (n.y < 0 || n.y > height) n.vy *= -1; n.x = Math.max(0, Math.min(width, n.x)); n.y = Math.max(0, Math.min(height, n.y)); } }
@@ -258,33 +261,18 @@
     let isCommsLive = false; 
     let hasJoined = false;
     let hasMic = false;
+    let ringingInterval = null; // Used to track continuous buzzing
     
     const waveform = document.getElementById('waveform');
-    const commsToggleBtn = document.getElementById('commsToggleBtn');
+    const acceptCallBtn = document.getElementById('acceptCallBtn');
+    const cutCallBtn = document.getElementById('cutCallBtn');
+    const statusText = document.getElementById('statusText');
 
     function setupKeepAliveAudio() {
       if (!keepAliveAudio) {
         keepAliveAudio = new Audio('data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA');
         keepAliveAudio.loop = true;
         keepAliveAudio.play().catch(() => {});
-      }
-    }
-
-    function setupMediaSession() {
-      if ('mediaSession' in navigator) {
-        navigator.mediaSession.metadata = new MediaMetadata({
-          title: 'Live Tactical Line',
-          artist: myName || 'Agent Comms',
-          album: 'Hands-Free Channel',
-          artwork: [{ src: 'https://cdn-icons-png.flaticon.com/512/3114/3114320.png', sizes: '512x512', type: 'image/png' }]
-        });
-        const toggleCommsAction = async () => {
-          await attemptMicRecovery();
-          isCommsLive = !isCommsLive;
-          updateAudioState();
-        };
-        navigator.mediaSession.setActionHandler('play', toggleCommsAction);
-        navigator.mediaSession.setActionHandler('pause', toggleCommsAction);
       }
     }
 
@@ -317,12 +305,12 @@
 
       if (isCommsLive) {
         waveform.classList.add('active');
-        commsToggleBtn.className = 'btn toggle-btn active-comms';
-        commsToggleBtn.innerHTML = "COMMS: LIVE<br><span style='font-size: 0.75rem; opacity: 0.8; margin-top: 4px; font-weight: 400;'>UPLINK ESTABLISHED</span>";
+        statusText.textContent = "LINE LIVE";
+        document.querySelector('.status-dot').classList.add('speaking');
       } else {
         waveform.classList.remove('active');
-        commsToggleBtn.className = 'btn toggle-btn muted';
-        commsToggleBtn.innerHTML = "COMMS: MUTED<br><span style='font-size: 0.75rem; opacity: 0.6; margin-top: 4px;'>TAP TO ARM</span>";
+        statusText.textContent = "STANDBY - MUTED";
+        document.querySelector('.status-dot').classList.remove('speaking');
       }
 
       if ('mediaSession' in navigator) {
@@ -334,11 +322,25 @@
       }
     }
 
-    commsToggleBtn.onclick = async () => {
+    // Accepting the Call
+    acceptCallBtn.onclick = async () => {
+      stopRinging();
       await attemptMicRecovery();
       if(!hasMic) return;
-      isCommsLive = !isCommsLive;
+      isCommsLive = true;
       updateAudioState();
+      
+      acceptCallBtn.style.display = 'none';
+      cutCallBtn.style.display = 'block';
+    };
+
+    // Cutting the Call (Muting the line)
+    cutCallBtn.onclick = () => {
+      isCommsLive = false;
+      updateAudioState();
+      
+      cutCallBtn.style.display = 'none';
+      // System returns to standby, WebRTC connections remain active
     };
 
     const buzzCooldowns = {};
@@ -395,16 +397,45 @@
       const toastText = document.getElementById('buzzToastText');
       toastText.textContent = text;
       toast.classList.add('show');
-      clearTimeout(showBuzzToast._t);
-      showBuzzToast._t = setTimeout(() => toast.classList.remove('show'), 4000);
+    }
+    
+    function hideBuzzToast() {
+      document.getElementById('buzzToast').classList.remove('show');
     }
 
-    function triggerIncomingBuzz(fromName) {
-      playBuzzTone();
-      if (navigator.vibrate) navigator.vibrate([400, 150, 400, 150, 400]);
+    function startRinging(fromName) {
+      if (ringingInterval) return; // Already ringing
+      
+      // Auto-cut current live session if ringing
+      if (isCommsLive) {
+         isCommsLive = false;
+         updateAudioState();
+      }
+
       showBuzzToast('INCOMING PING: ' + fromName);
       document.body.classList.add('incoming-buzz');
-      setTimeout(() => document.body.classList.remove('incoming-buzz'), 3200);
+      
+      acceptCallBtn.style.display = 'block';
+      cutCallBtn.style.display = 'none';
+
+      // Ring immediately, then loop every 3 seconds
+      const triggerRing = () => {
+        playBuzzTone();
+        if (navigator.vibrate) navigator.vibrate([400, 150, 400, 150, 400]);
+      };
+      
+      triggerRing();
+      ringingInterval = setInterval(triggerRing, 3000);
+    }
+
+    function stopRinging() {
+      if (ringingInterval) {
+        clearInterval(ringingInterval);
+        ringingInterval = null;
+      }
+      document.body.classList.remove('incoming-buzz');
+      hideBuzzToast();
+      acceptCallBtn.style.display = 'none';
     }
 
     async function sendBuzz(targetUid, btnEl) {
@@ -414,12 +445,16 @@
       
       const originalText = btnEl ? btnEl.textContent : null;
       if (btnEl) { btnEl.disabled = true; btnEl.textContent = 'TX...'; }
-
+      
+      // Auto-live when you buzz someone
       if (!isCommsLive) {
         await attemptMicRecovery();
         if (hasMic) {
            isCommsLive = true;
            updateAudioState();
+           cutCallBtn.style.display = 'block';
+           acceptCallBtn.style.display = 'none';
+           stopRinging();
         }
       }
       
@@ -439,7 +474,9 @@
       onSnapshot(qMine, (snapshot) => {
         snapshot.docChanges().forEach((change) => { 
           if (change.type === 'added') {
-            if (change.doc.data().sender !== myUid) triggerIncomingBuzz(change.doc.data().senderName || 'AGENT');
+            if (change.doc.data().sender !== myUid) {
+               startRinging(change.doc.data().senderName || 'AGENT');
+            }
             deleteDoc(doc(db, 'family_buzz', change.doc.id)).catch(() => {});
           }
         });
@@ -449,7 +486,9 @@
       onSnapshot(qAll, (snapshot) => {
         snapshot.docChanges().forEach((change) => { 
           if (change.type === 'added') {
-             if (change.doc.data().sender !== myUid) triggerIncomingBuzz(change.doc.data().senderName || 'AGENT');
+             if (change.doc.data().sender !== myUid) {
+                startRinging(change.doc.data().senderName || 'AGENT');
+             }
              deleteDoc(doc(db, 'family_buzz', change.doc.id)).catch(() => {});
           } 
         });
@@ -474,7 +513,7 @@
           audio.id = 'audio-' + targetUid;
           audio.autoplay = true;
           audio.playsInline = true; 
-          audio.muted = !isCommsLive;
+          audio.muted = !isCommsLive; // Initially muted based on state
           document.getElementById('audioContainer').appendChild(audio);
         }
         audio.srcObject = event.streams[0];
@@ -667,21 +706,17 @@
 
       try {
         localStream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
+        // Start muted by default, waiting for a buzz or for user to buzz someone
         localStream.getAudioTracks().forEach(t => t.enabled = false);
         hasMic = true;
+        isCommsLive = false; 
       } catch (e) {
         localStream = null;
         hasMic = false;
       }
 
       setupKeepAliveAudio();
-      setupMediaSession();
       updateAudioState();
-
-      if (!hasMic) {
-        commsToggleBtn.disabled = true;
-        commsToggleBtn.innerHTML = "MIC DENIED<br><span style='font-size: 0.75rem; opacity: 0.6; margin-top: 4px;'>CHECK OS PERMISSIONS</span>";
-      }
 
       try {
         await setDoc(doc(db, 'family_presence', myUid), {

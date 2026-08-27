@@ -46,69 +46,73 @@
     }
 
     .app {
-      position: relative;
-      z-index: 2;
-      width: 100%;
-      max-width: 480px;
-      display: flex;
-      flex-direction: column;
-      gap: 1.25rem;
-    }
-
-    .header { text-align: center; padding: 1rem 0 0.5rem; }
-    .logo { display: flex; align-items: center; justify-content: center; gap: 0.75rem; margin-bottom: 0.5rem; }
-    .logo-icon { width: 36px; height: 36px; background: transparent; border: 2px solid var(--text); display: flex; align-items: center; justify-content: center; }
-    .logo-icon svg { color: var(--text); }
-    h1 { font-family: 'IBM Plex Mono', monospace; font-size: 1.4rem; font-weight: 600; letter-spacing: 0.15em; text-transform: uppercase; }
+          position: relative;
+          z-index: 10;
+          width: 100%;
+          max-width: 480px;
+          display: flex;
+          flex-direction: column;
+          gap: 1.25rem;
+          pointer-events: none; /* Let clicks pass through the empty space to the video below */
+        }
+        .app > * { pointer-events: auto; } /* Reactivate clicks for UI panels */
     
-    .big-id-input {
-      background: transparent;
-      border: none;
-      border-bottom: 2px dashed var(--muted);
-      color: var(--text);
-      font-family: 'IBM Plex Mono', monospace;
-      font-size: 3rem;
-      font-weight: 600;
-      text-align: center;
-      width: 100%;
-      margin-top: 1rem;
-      padding: 0.2rem;
-      outline: none;
-      text-transform: uppercase;
-      transition: all 0.2s;
-    }
-    .big-id-input:focus { border-bottom-color: var(--text); }
-    .big-id-input::placeholder { color: var(--muted); font-size: 1.5rem; }
-
-    .card { background: var(--bg); border: 1px solid var(--border); padding: 1.5rem; }
-    .card-label { font-family: 'IBM Plex Mono', monospace; font-size: 0.75rem; font-weight: 600; letter-spacing: 0.15em; text-transform: uppercase; margin-bottom: 1.25rem; display: flex; align-items: center; gap: 0.6rem; color: var(--text); }
-    .card-label::before { content: ''; display: inline-block; width: 4px; height: 14px; background: var(--text); }
+        .header { text-align: center; padding: 1rem 0 0.5rem; }
+        .logo { display: flex; align-items: center; justify-content: center; gap: 0.75rem; margin-bottom: 0.5rem; }
+        .logo-icon { width: 36px; height: 36px; background: rgba(0, 4, 50, 0.8); border: 2px solid var(--text); display: flex; align-items: center; justify-content: center; backdrop-filter: blur(4px); }
+        .logo-icon svg { color: var(--text); }
+        h1 { font-family: 'IBM Plex Mono', monospace; font-size: 1.4rem; font-weight: 600; letter-spacing: 0.15em; text-transform: uppercase; text-shadow: 0 2px 4px rgba(0,0,0,0.5); }
+        
+        .big-id-input {
+          background: rgba(0, 4, 50, 0.8);
+          border: none;
+          border-bottom: 2px dashed var(--muted);
+          color: var(--text);
+          font-family: 'IBM Plex Mono', monospace;
+          font-size: 3rem;
+          font-weight: 600;
+          text-align: center;
+          width: 100%;
+          margin-top: 1rem;
+          padding: 0.2rem;
+          outline: none;
+          text-transform: uppercase;
+          transition: all 0.2s;
+          backdrop-filter: blur(4px);
+        }
+        .big-id-input:focus { border-bottom-color: var(--text); }
+        .big-id-input::placeholder { color: var(--muted); font-size: 1.5rem; }
     
-    .status-bar { background: var(--bg); border: 1px solid var(--border); padding: 1rem; display: flex; align-items: center; justify-content: center; gap: 0.75rem; font-family: 'IBM Plex Mono', monospace; font-size: 0.85rem; }
-    .status-dot { width: 10px; height: 10px; background: transparent; border: 1px solid var(--muted); flex-shrink: 0; }
-    .status-dot.connected { background: var(--text); border-color: var(--text); }
-    .status-dot.error { background: transparent; border: 1px dashed var(--muted); }
-    .status-dot.speaking { animation: pulseSpeak 0.8s ease-in-out infinite; }
-    @keyframes pulseSpeak { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.3; transform: scale(1.2); } }
+        .card { background: rgba(0, 4, 50, 0.85); border: 1px solid var(--border); padding: 1.5rem; backdrop-filter: blur(4px); box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
+        .card-label { font-family: 'IBM Plex Mono', monospace; font-size: 0.75rem; font-weight: 600; letter-spacing: 0.15em; text-transform: uppercase; margin-bottom: 1.25rem; display: flex; align-items: center; gap: 0.6rem; color: var(--text); }
+        .card-label::before { content: ''; display: inline-block; width: 4px; height: 14px; background: var(--text); }
+        
+        .status-bar { background: rgba(0, 4, 50, 0.85); border: 1px solid var(--border); padding: 1rem; display: flex; align-items: center; justify-content: center; gap: 0.75rem; font-family: 'IBM Plex Mono', monospace; font-size: 0.85rem; backdrop-filter: blur(4px); box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
+        .status-dot { width: 10px; height: 10px; background: transparent; border: 1px solid var(--muted); flex-shrink: 0; }
+        .status-dot.connected { background: var(--text); border-color: var(--text); }
+        .status-dot.error { background: transparent; border: 1px dashed var(--muted); }
+        .status-dot.speaking { animation: pulseSpeak 0.8s ease-in-out infinite; }
+        @keyframes pulseSpeak { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.3; transform: scale(1.2); } }
+        
+        .btn { background: rgba(0,0,0,0.4); color: var(--text); border: 1px solid var(--text); padding: 1rem; font-family: 'IBM Plex Mono', monospace; font-size: 0.9rem; font-weight: 600; cursor: pointer; letter-spacing: 0.1em; width: 100%; transition: all 0.2s ease; text-transform: uppercase; margin-bottom: 10px; backdrop-filter: blur(2px); }
+        .btn:hover:not(:disabled) { background: var(--text); color: var(--bg); }
+        .btn:active:not(:disabled) { transform: translateY(1px); }
+        .btn:disabled { background: transparent; color: var(--muted); border-color: var(--border-dim); cursor: not-allowed; }
     
-    .btn { background: transparent; color: var(--text); border: 1px solid var(--text); padding: 1rem; font-family: 'IBM Plex Mono', monospace; font-size: 0.9rem; font-weight: 600; cursor: pointer; letter-spacing: 0.1em; width: 100%; transition: all 0.2s ease; text-transform: uppercase; margin-bottom: 10px; }
-    .btn:hover:not(:disabled) { background: var(--text); color: var(--bg); }
-    .btn:active:not(:disabled) { transform: translateY(1px); }
-    .btn:disabled { background: transparent; color: var(--muted); border-color: var(--border-dim); cursor: not-allowed; }
-
-    #acceptCallBtn { background: var(--text); color: var(--bg); font-size: 1.1rem; height: 70px; display: none; box-shadow: 0 0 20px rgba(255,255,255,0.4); animation: pulseButton 1s infinite alternate; }
-    #cutCallBtn { background: transparent; color: var(--text); font-size: 1.1rem; height: 70px; display: none; border-color: #ff4444; }
-    #cutCallBtn:hover { background: #ff4444; color: white; }
+        #acceptCallBtn { background: var(--text); color: var(--bg); font-size: 1.1rem; height: 70px; display: none; box-shadow: 0 0 20px rgba(255,255,255,0.4); animation: pulseButton 1s infinite alternate; }
+        #cutCallBtn { background: rgba(255,68,68,0.2); color: #ff4444; font-size: 1.1rem; height: 70px; display: none; border-color: #ff4444; }
+        #cutCallBtn:hover { background: #ff4444; color: white; }
+        
+        @keyframes pulseButton { 0% { transform: scale(0.98); } 100% { transform: scale(1.02); } }
     
-    @keyframes pulseButton { 0% { transform: scale(0.98); } 100% { transform: scale(1.02); } }
-
-    /* Video UI Styles */
-    .video-grid { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
-    .video-wrapper { position: relative; border: 1px solid var(--border); width: 45%; aspect-ratio: 3/4; background: #000; overflow: hidden; }
-    .video-wrapper.active { border-color: var(--text); }
-    .video-wrapper video { width: 100%; height: 100%; object-fit: cover; }
-    .video-wrapper video.mirrored { transform: scaleX(-1); }
-    .video-label { position: absolute; bottom: 4px; left: 4px; background: var(--bg); border: 1px solid var(--text); font-family: 'IBM Plex Mono', monospace; font-size: 0.6rem; padding: 2px 4px; color: var(--text); z-index: 2; }
+        /* Fullscreen Edge-to-Edge Video Layout */
+        .fullscreen-video-container { position: fixed; inset: 0; z-index: 1; width: 100vw; height: 100vh; background: #000; }
+        .video-grid { display: flex; flex-wrap: wrap; width: 100%; height: 100%; gap: 0; align-content: flex-start; }
+        .video-wrapper { position: relative; border: 1px solid rgba(0,4,50,0.5); background: #000; overflow: hidden; display: flex; justify-content: center; align-items: center; transition: width 0.3s ease, height 0.3s ease; }
+        .video-wrapper.active { border-color: var(--text); }
+        .video-wrapper video { width: 100%; height: 100%; object-fit: cover; }
+        .video-wrapper video.mirrored { transform: scaleX(-1); }
+        .video-label { position: absolute; bottom: 8px; left: 8px; background: rgba(0,0,0,0.6); border: 1px solid var(--text); font-family: 'IBM Plex Mono', monospace; font-size: 0.7rem; padding: 4px 8px; color: var(--text); z-index: 2; backdrop-filter: blur(2px); text-transform: uppercase; }
 
     .members-list { list-style: none; padding: 0; margin: 0; }
     .members-list li { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; font-family: 'IBM Plex Mono', monospace; font-size: 0.9rem; padding-bottom: 12px; border-bottom: 1px solid var(--border-dim); }
@@ -144,9 +148,19 @@
 
   <canvas id="bgCanvas"></canvas>
 
-  <div class="app">
-    <!-- Main Live Screen -->
-    <div id="channelScreen" style="display: flex; flex-direction: column; gap: 1.25rem;">
+  <!-- Full Screen Video Grid Layer -->
+    <div id="videoCard" class="fullscreen-video-container" style="display: none;">
+      <div class="video-grid" id="videoGrid">
+        <div class="video-wrapper" id="localVideoWrapper">
+          <video id="localVideo" class="mirrored" autoplay playsinline muted></video>
+          <div class="video-label">SELF</div>
+        </div>
+      </div>
+    </div>
+  
+    <div class="app">
+      <!-- Main Live Screen -->
+      <div id="channelScreen" style="display: flex; flex-direction: column; gap: 1.25rem;">
       <div class="header">
         <div class="logo">
           <div class="logo-icon">
@@ -181,17 +195,6 @@
         <button id="buzzAllBtn" class="btn">TRANSMIT GLOBAL BUZZ</button>
       </div>
       
-      <!-- Video Feeds Card -->
-      <div class="card" id="videoCard" style="display: none;">
-        <div class="card-label">Visual Uplink</div>
-        <div class="video-grid" id="videoGrid">
-          <div class="video-wrapper" id="localVideoWrapper">
-            <video id="localVideo" class="mirrored" autoplay playsinline muted></video>
-            <div class="video-label">SELF</div>
-          </div>
-        </div>
-      </div>
-
       <!-- Network Presence Card -->
       <div class="card">
         <div class="card-label">Connected Nodes</div>
@@ -290,9 +293,25 @@
     const statusText = document.getElementById('statusText');
     const myIdInput = document.getElementById('myIdInput');
     const videoCard = document.getElementById('videoCard');
-    const localVideo = document.getElementById('localVideo');
-
-    // Handle manual edits to the assigned ID
+        const localVideo = document.getElementById('localVideo');
+    
+        // Dynamic Video Grid Calculator
+        function updateVideoGrid() {
+          const wrappers = document.querySelectorAll('.video-wrapper');
+          const count = wrappers.length;
+          if (count === 0) return;
+          
+          const cols = Math.ceil(Math.sqrt(count));
+          const rows = Math.ceil(count / cols);
+          
+          wrappers.forEach(w => {
+            w.style.width = `${100 / cols}%`;
+            w.style.height = `${100 / rows}%`;
+          });
+        }
+        window.addEventListener('resize', updateVideoGrid);
+    
+        // Handle manual edits to the assigned ID
     myIdInput.addEventListener('change', (e) => {
       const newName = e.target.value.trim();
       if (newName) {
@@ -587,11 +606,12 @@
           label.textContent = 'NODE ' + targetUid;
           
           wrapper.appendChild(vid);
-          wrapper.appendChild(label);
-          document.getElementById('videoGrid').appendChild(wrapper);
-        }
-        
-        const videoEl = document.getElementById('video-' + targetUid);
+                    wrapper.appendChild(label);
+                    document.getElementById('videoGrid').appendChild(wrapper);
+                    updateVideoGrid();
+                  }
+                  
+                  const videoEl = document.getElementById('video-' + targetUid);
         videoEl.srcObject = event.streams[0];
         videoEl.muted = !isCommsLive; 
         
@@ -605,11 +625,14 @@
       };
 
       pc.onconnectionstatechange = () => {
-        if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed' || pc.connectionState === 'closed') {
-          const wrapper = document.getElementById('video-wrapper-' + targetUid);
-          if (wrapper) wrapper.remove();
-          
-          if (peers[targetUid]) {
+              if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed' || pc.connectionState === 'closed') {
+                const wrapper = document.getElementById('video-wrapper-' + targetUid);
+                if (wrapper) {
+                  wrapper.remove();
+                  updateVideoGrid();
+                }
+                
+                if (peers[targetUid]) {
             peers[targetUid].close();
             delete peers[targetUid];
           }
@@ -695,11 +718,14 @@
           const uid = docSnap.id;
           
           // Clear dead feeds if someone closes the app
-          if (!data.online || (now - data.lastSeen > 60000)) {
-            const wrapper = document.getElementById('video-wrapper-' + uid);
-            if (wrapper) wrapper.remove();
-            
-            if (peers[uid] && peers[uid].connectionState !== 'closed') {
+                    if (!data.online || (now - data.lastSeen > 60000)) {
+                      const wrapper = document.getElementById('video-wrapper-' + uid);
+                      if (wrapper) {
+                        wrapper.remove();
+                        updateVideoGrid();
+                      }
+                      
+                      if (peers[uid] && peers[uid].connectionState !== 'closed') {
                peers[uid].close();
                delete peers[uid];
             }
@@ -839,14 +865,15 @@
       }
 
       if (localStream) {
-         localStream.getTracks().forEach(t => t.enabled = true);
-         isCommsLive = true;
-      } else {
-         isCommsLive = false;
-      }
-
-      setupKeepAliveAudio();
-      updateMediaState();
+               localStream.getTracks().forEach(t => t.enabled = true);
+               isCommsLive = true;
+            } else {
+               isCommsLive = false;
+            }
+      
+            setupKeepAliveAudio();
+            updateMediaState();
+            updateVideoGrid(); // Init local scale
 
       // 3. Register Presence and enter channel
       try {

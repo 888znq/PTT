@@ -445,53 +445,68 @@
         window.addEventListener('resize', updateVideoGrid);
         
             async function switchCamera() {
-                  if (!localStream) return;
-                  await getVideoDevices();
-                  if (videoDevices.length < 2) return; // Only one camera on this device - nothing to switch to
+                              if (!localStream) return;
+                              await getVideoDevices();
+                              if (videoDevices.length < 2) return; // Only one camera on this device - nothing to switch to
             
-                  const oldVideoTrack = localStream.getVideoTracks()[0];
-                  const oldSettings = oldVideoTrack ? oldVideoTrack.getSettings() : {};
-                  let idx = videoDevices.findIndex(function (d) { return d.deviceId === oldSettings.deviceId; });
-                  if (idx === -1) idx = currentDeviceIndex;
-                  currentDeviceIndex = (idx + 1) % videoDevices.length;
-                  const nextDeviceId = videoDevices[currentDeviceIndex].deviceId;
+                              const oldVideoTrack = localStream.getVideoTracks()[0];
+                              const oldSettings = oldVideoTrack ? oldVideoTrack.getSettings() : {};
+                              let idx = videoDevices.findIndex(function (d) { return d.deviceId === oldSettings.deviceId; });
+                              if (idx === -1) idx = currentDeviceIndex;
+                              currentDeviceIndex = (idx + 1) % videoDevices.length;
+                              const nextDeviceId = videoDevices[currentDeviceIndex].deviceId;
             
-                  try {
-                          const newStream = await navigator.mediaDevices.getUserMedia({
-                            video: {
-                              deviceId: { exact: nextDeviceId },
-                              width: { ideal: currentProfile.width },
-                              height: { ideal: currentProfile.height },
-                              frameRate: { ideal: currentProfile.frameRate, max: currentProfile.frameRate }
-                            },
-                            audio: false
-                          });
-                    const newVideoTrack = newStream.getVideoTracks()[0];
-                    if (!newVideoTrack) return;
+                              const buildConstraints = function (deviceId) {
+                                return {
+                                  video: {
+                                    deviceId: { exact: deviceId },
+                                    width: { ideal: currentProfile.width },
+                                    height: { ideal: currentProfile.height },
+                                    frameRate: { ideal: currentProfile.frameRate, max: currentProfile.frameRate }
+                                  },
+                                  audio: false
+                                };
+                              };
             
-                    Object.values(peers).forEach(function (pc) {
-                      const sender = pc.getSenders().find(function (s) { return s.track && s.track.kind === 'video'; });
-                      if (sender) sender.replaceTrack(newVideoTrack).catch(function () {});
-                    });
+                              let newStream;
+                              try {
+                                newStream = await navigator.mediaDevices.getUserMedia(buildConstraints(nextDeviceId));
+                              } catch (firstErr) {
+                                if (oldVideoTrack) {
+                                  localStream.removeTrack(oldVideoTrack);
+                                  oldVideoTrack.stop();
+                                }
+                                try {
+                                  newStream = await navigator.mediaDevices.getUserMedia(buildConstraints(nextDeviceId));
+                                } catch (secondErr) {
+                                  alert("CAMERA SWITCH FAILED.");
+                                  return;
+                                }
+                              }
             
-                    if (oldVideoTrack) {
-                      localStream.removeTrack(oldVideoTrack);
-                      oldVideoTrack.stop();
-                    }
-                    localStream.addTrack(newVideoTrack);
-                    newVideoTrack.enabled = isCommsLive;
-                    localVideo.srcObject = localStream;
+                              const newVideoTrack = newStream.getVideoTracks()[0];
+                              if (!newVideoTrack) return;
             
-                    const newSettings = newVideoTrack.getSettings();
-                    if (newSettings.facingMode) {
-                      localVideo.classList.toggle('mirrored', newSettings.facingMode === 'user');
-                    } else {
-                      localVideo.classList.toggle('mirrored', currentDeviceIndex === 0);
-                    }
-                  } catch (e) {
-                    alert("CAMERA SWITCH FAILED.");
-                  }
-                }
+                              Object.values(peers).forEach(function (pc) {
+                                const sender = pc.getSenders().find(function (s) { return s.track && s.track.kind === 'video'; });
+                                if (sender) sender.replaceTrack(newVideoTrack).catch(function () {});
+                              });
+            
+                              if (oldVideoTrack && localStream.getVideoTracks().indexOf(oldVideoTrack) !== -1) {
+                                localStream.removeTrack(oldVideoTrack);
+                                oldVideoTrack.stop();
+                              }
+                              localStream.addTrack(newVideoTrack);
+                              newVideoTrack.enabled = isCommsLive;
+                              localVideo.srcObject = localStream;
+            
+                              const newSettings = newVideoTrack.getSettings();
+                              if (newSettings.facingMode) {
+                                localVideo.classList.toggle('mirrored', newSettings.facingMode === 'user');
+                              } else {
+                                localVideo.classList.toggle('mirrored', currentDeviceIndex === 0);
+                              }
+                            }
         
             (function setupDoubleTapCameraSwitch() {
                       const wrapperEl = document.getElementById('localVideoWrapper');

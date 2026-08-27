@@ -23,113 +23,109 @@
     }
 
     body {
-      font-family: 'IBM Plex Sans', sans-serif;
-      background: var(--bg);
-      color: var(--text);
-      min-height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 1.5rem;
-      touch-action: manipulation;
-      overflow-x: hidden;
-    }
-
-    #bgCanvas {
-      position: fixed;
-      inset: 0;
-      width: 100%;
-      height: 100%;
-      z-index: 0;
-      display: block;
-      opacity: 0.7;
-    }
-
-    .app {
-          position: relative;
-          z-index: 10;
-          width: 100%;
-          max-width: 480px;
-          display: flex;
-          flex-direction: column;
-          gap: 1.25rem;
-          pointer-events: none; /* Let clicks pass through the empty space to the video below */
-        }
-        .app > * { pointer-events: auto; } /* Reactivate clicks for UI panels */
-    
-        .header { text-align: center; padding: 1rem 0 0.5rem; }
-        .logo { display: flex; align-items: center; justify-content: center; gap: 0.75rem; margin-bottom: 0.5rem; }
-        .logo-icon { width: 36px; height: 36px; background: rgba(0, 4, 50, 0.8); border: 2px solid var(--text); display: flex; align-items: center; justify-content: center; backdrop-filter: blur(4px); }
-        .logo-icon svg { color: var(--text); }
-        h1 { font-family: 'IBM Plex Mono', monospace; font-size: 1.4rem; font-weight: 600; letter-spacing: 0.15em; text-transform: uppercase; text-shadow: 0 2px 4px rgba(0,0,0,0.5); }
-        
-        .big-id-input {
-          background: rgba(0, 4, 50, 0.8);
-          border: none;
-          border-bottom: 2px dashed var(--muted);
+          font-family: 'IBM Plex Sans', sans-serif;
+          background: var(--bg);
           color: var(--text);
-          font-family: 'IBM Plex Mono', monospace;
-          font-size: 3rem;
-          font-weight: 600;
-          text-align: center;
-          width: 100%;
-          margin-top: 1rem;
-          padding: 0.2rem;
-          outline: none;
-          text-transform: uppercase;
-          transition: all 0.2s;
-          backdrop-filter: blur(4px);
+          height: 100vh;
+          margin: 0;
+          padding: 0;
+          touch-action: manipulation;
+          overflow: hidden;
         }
-        .big-id-input:focus { border-bottom-color: var(--text); }
-        .big-id-input::placeholder { color: var(--muted); font-size: 1.5rem; }
     
-        .card { background: rgba(0, 4, 50, 0.85); border: 1px solid var(--border); padding: 1.5rem; backdrop-filter: blur(4px); box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
-        .card-label { font-family: 'IBM Plex Mono', monospace; font-size: 0.75rem; font-weight: 600; letter-spacing: 0.15em; text-transform: uppercase; margin-bottom: 1.25rem; display: flex; align-items: center; gap: 0.6rem; color: var(--text); }
-        .card-label::before { content: ''; display: inline-block; width: 4px; height: 14px; background: var(--text); }
+        #bgCanvas {
+          position: fixed;
+          inset: 0;
+          width: 100%;
+          height: 100%;
+          z-index: 0;
+          display: block;
+          opacity: 0.7;
+        }
+    
+        .app {
+                  position: fixed;
+                  bottom: 0;
+                  left: 0;
+                  z-index: 10;
+                  width: 100vw;
+                  height: 20vh;
+                  overflow-x: auto;
+                  overflow-y: hidden;
+                  background: rgba(0, 4, 50, 0.85);
+                  border-top: 1px solid var(--border);
+                  backdrop-filter: blur(8px);
+                }
+                .app::-webkit-scrollbar { height: 6px; }
+                .app::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); }
+                
+                .header { display: flex; align-items: center; gap: 1rem; padding: 0; flex-shrink: 0; }
+                .logo { display: flex; align-items: center; gap: 0.5rem; margin: 0; }
+                .logo-icon { width: 32px; height: 32px; background: rgba(0, 4, 50, 0.8); border: 2px solid var(--text); display: flex; align-items: center; justify-content: center; backdrop-filter: blur(4px); }
+                .logo-icon svg { color: var(--text); width: 16px; height: 16px; }
+                h1 { font-family: 'IBM Plex Mono', monospace; font-size: 1.1rem; font-weight: 600; letter-spacing: 0.1em; margin: 0; }
+                
+                .big-id-input {
+                  background: rgba(0, 4, 50, 0.8);
+                  border: none;
+                  border-bottom: 2px dashed var(--muted);
+                  color: var(--text);
+                  font-family: 'IBM Plex Mono', monospace;
+                  font-size: 1.5rem;
+                  font-weight: 600;
+                  text-align: center;
+                  width: 80px;
+                  margin: 0;
+                  padding: 0.2rem;
+                  outline: none;
+                  text-transform: uppercase;
+                }
+                .big-id-input:focus { border-bottom-color: var(--text); }
+                .big-id-input::placeholder { color: var(--muted); font-size: 1rem; }
+                
+                .card { background: transparent; border: none; padding: 0; box-shadow: none; display: flex; align-items: center; gap: 0.75rem; flex-shrink: 0; height: 100%; }
+                .card-label { display: none; }
+                
+                .status-bar { background: transparent; border: 1px solid var(--border); padding: 0 1rem; display: flex; align-items: center; gap: 0.5rem; font-family: 'IBM Plex Mono', monospace; font-size: 0.8rem; flex-shrink: 0; height: 44px; border-radius: 4px; }
+                .status-dot { width: 8px; height: 8px; background: transparent; border: 1px solid var(--muted); flex-shrink: 0; border-radius: 50%; }
+                .status-dot.connected { background: var(--text); border-color: var(--text); }
+                .status-dot.error { background: transparent; border: 1px dashed var(--muted); }
+                .status-dot.speaking { animation: pulseSpeak 0.8s ease-in-out infinite; }
+                @keyframes pulseSpeak { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.3; transform: scale(1.2); } }
+                
+                .btn { background: rgba(0,0,0,0.4); color: var(--text); border: 1px solid var(--text); padding: 0 1rem; font-family: 'IBM Plex Mono', monospace; font-size: 0.85rem; font-weight: 600; cursor: pointer; letter-spacing: 0.05em; width: auto; height: 44px; transition: all 0.2s ease; text-transform: uppercase; margin: 0; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+                .btn:hover:not(:disabled) { background: var(--text); color: var(--bg); }
+                .btn:active:not(:disabled) { transform: translateY(1px); }
+                .btn:disabled { background: transparent; color: var(--muted); border-color: var(--border-dim); cursor: not-allowed; }
+                
+                #acceptCallBtn { background: var(--text); color: var(--bg); font-size: 1rem; display: none; box-shadow: 0 0 15px rgba(255,255,255,0.4); animation: pulseButton 1s infinite alternate; }
+                #cutCallBtn { background: rgba(255,68,68,0.2); color: #ff4444; font-size: 1rem; display: none; border-color: #ff4444; }
+                #cutCallBtn:hover { background: #ff4444; color: white; }
+                
+                /* 80% Top Video Layout */
+                .fullscreen-video-container { position: fixed; top: 0; left: 0; z-index: 1; width: 100vw; height: 80vh; background: #000; }
+                .video-grid { display: flex; flex-wrap: wrap; width: 100%; height: 100%; gap: 0; align-content: flex-start; }
+                .video-wrapper { position: relative; border: 1px solid rgba(0,4,50,0.5); background: #000; overflow: hidden; display: flex; justify-content: center; align-items: center; transition: width 0.3s ease, height 0.3s ease; }
+                .video-wrapper.active { border-color: var(--text); }
+                .video-wrapper video { width: 100%; height: 100%; object-fit: cover; }
+                .video-wrapper video.mirrored { transform: scaleX(-1); }
+                .video-label { position: absolute; bottom: 8px; left: 8px; background: rgba(0,0,0,0.6); border: 1px solid var(--text); font-family: 'IBM Plex Mono', monospace; font-size: 0.7rem; padding: 4px 8px; color: var(--text); z-index: 2; backdrop-filter: blur(2px); text-transform: uppercase; }
         
-        .status-bar { background: rgba(0, 4, 50, 0.85); border: 1px solid var(--border); padding: 1rem; display: flex; align-items: center; justify-content: center; gap: 0.75rem; font-family: 'IBM Plex Mono', monospace; font-size: 0.85rem; backdrop-filter: blur(4px); box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
-        .status-dot { width: 10px; height: 10px; background: transparent; border: 1px solid var(--muted); flex-shrink: 0; }
-        .status-dot.connected { background: var(--text); border-color: var(--text); }
-        .status-dot.error { background: transparent; border: 1px dashed var(--muted); }
-        .status-dot.speaking { animation: pulseSpeak 0.8s ease-in-out infinite; }
-        @keyframes pulseSpeak { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.3; transform: scale(1.2); } }
+            .members-list { list-style: none; padding: 0; margin: 0; display: flex; align-items: center; gap: 0.75rem; }
+            .members-list li { display: flex; align-items: center; gap: 8px; font-family: 'IBM Plex Mono', monospace; font-size: 0.85rem; background: rgba(255,255,255,0.05); border: 1px solid var(--border-dim); padding: 0 0.75rem; height: 44px; border-radius: 4px; white-space: nowrap; margin-bottom: 0; }
+            .member-name { display: flex; align-items: center; gap: 8px; text-transform: uppercase; }
+            
+            .buzz-member-btn { background: transparent; border: 1px solid var(--text); color: var(--text); padding: 0 0.5rem; font-family: 'IBM Plex Mono', monospace; font-size: 0.7rem; font-weight: 600; cursor: pointer; margin-left: 5px; height: 28px; transition: all 0.15s ease; border-radius: 2px; margin-bottom: 0; }
+            .buzz-member-btn:hover:not(:disabled) { background: var(--text); color: var(--bg); }
+            .buzz-member-btn:disabled { opacity: 0.3; cursor: not-allowed; border-color: var(--border); color: var(--muted); }
+            
+            body.incoming-buzz { animation: buzzFlash 1s ease-in-out infinite; }
+            @keyframes buzzFlash { 0%, 100% { background: var(--bg); } 50% { background: var(--text); color: var(--bg); } }
+            
+            .buzz-toast { position: fixed; top: 1.5rem; left: 50%; transform: translateX(-50%); z-index: 50; background: var(--text); color: var(--bg); border: none; padding: 1rem 1.5rem; font-family: 'IBM Plex Mono', monospace; font-size: 0.9rem; font-weight: 600; display: none; align-items: center; text-transform: uppercase; }
+            .buzz-toast.show { display: flex; }
         
-        .btn { background: rgba(0,0,0,0.4); color: var(--text); border: 1px solid var(--text); padding: 1rem; font-family: 'IBM Plex Mono', monospace; font-size: 0.9rem; font-weight: 600; cursor: pointer; letter-spacing: 0.1em; width: 100%; transition: all 0.2s ease; text-transform: uppercase; margin-bottom: 10px; backdrop-filter: blur(2px); }
-        .btn:hover:not(:disabled) { background: var(--text); color: var(--bg); }
-        .btn:active:not(:disabled) { transform: translateY(1px); }
-        .btn:disabled { background: transparent; color: var(--muted); border-color: var(--border-dim); cursor: not-allowed; }
-    
-        #acceptCallBtn { background: var(--text); color: var(--bg); font-size: 1.1rem; height: 70px; display: none; box-shadow: 0 0 20px rgba(255,255,255,0.4); animation: pulseButton 1s infinite alternate; }
-        #cutCallBtn { background: rgba(255,68,68,0.2); color: #ff4444; font-size: 1.1rem; height: 70px; display: none; border-color: #ff4444; }
-        #cutCallBtn:hover { background: #ff4444; color: white; }
-        
-        @keyframes pulseButton { 0% { transform: scale(0.98); } 100% { transform: scale(1.02); } }
-    
-        /* Fullscreen Edge-to-Edge Video Layout */
-        .fullscreen-video-container { position: fixed; inset: 0; z-index: 1; width: 100vw; height: 100vh; background: #000; }
-        .video-grid { display: flex; flex-wrap: wrap; width: 100%; height: 100%; gap: 0; align-content: flex-start; }
-        .video-wrapper { position: relative; border: 1px solid rgba(0,4,50,0.5); background: #000; overflow: hidden; display: flex; justify-content: center; align-items: center; transition: width 0.3s ease, height 0.3s ease; }
-        .video-wrapper.active { border-color: var(--text); }
-        .video-wrapper video { width: 100%; height: 100%; object-fit: cover; }
-        .video-wrapper video.mirrored { transform: scaleX(-1); }
-        .video-label { position: absolute; bottom: 8px; left: 8px; background: rgba(0,0,0,0.6); border: 1px solid var(--text); font-family: 'IBM Plex Mono', monospace; font-size: 0.7rem; padding: 4px 8px; color: var(--text); z-index: 2; backdrop-filter: blur(2px); text-transform: uppercase; }
-
-    .members-list { list-style: none; padding: 0; margin: 0; }
-    .members-list li { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; font-family: 'IBM Plex Mono', monospace; font-size: 0.9rem; padding-bottom: 12px; border-bottom: 1px solid var(--border-dim); }
-    .members-list li:last-child { margin-bottom: 0; padding-bottom: 0; border-bottom: none; }
-    .member-name { display: flex; align-items: center; gap: 12px; text-transform: uppercase; }
-    
-    .buzz-member-btn { background: transparent; border: 1px solid var(--text); color: var(--text); padding: 0.4rem 0.8rem; font-family: 'IBM Plex Mono', monospace; font-size: 0.75rem; font-weight: 600; cursor: pointer; letter-spacing: 0.05em; width: auto; transition: all 0.15s ease; margin-bottom: 0; }
-    .buzz-member-btn:hover:not(:disabled) { background: var(--text); color: var(--bg); }
-    .buzz-member-btn:disabled { opacity: 0.3; cursor: not-allowed; border-color: var(--border); color: var(--muted); }
-    
-    body.incoming-buzz { animation: buzzFlash 1s ease-in-out infinite; }
-    @keyframes buzzFlash { 0%, 100% { background: var(--bg); } 50% { background: var(--text); color: var(--bg); } }
-    
-    .buzz-toast { position: fixed; top: 1.5rem; left: 50%; transform: translateX(-50%); z-index: 50; background: var(--text); color: var(--bg); border: none; padding: 1rem 1.5rem; font-family: 'IBM Plex Mono', monospace; font-size: 0.9rem; font-weight: 600; display: none; align-items: center; text-transform: uppercase; }
-    .buzz-toast.show { display: flex; }
-
-    .waveform { display: none; align-items: center; justify-content: center; gap: 6px; height: 32px; margin-bottom: 1.5rem; }
+            .waveform { display: none; align-items: center; justify-content: center; gap: 4px; height: 44px; margin: 0 0.5rem; }
     .waveform.active { display: flex; }
     .waveform span { display: block; width: 4px; background: var(--text); animation: wave 1.2s ease-in-out infinite; }
     .waveform span:nth-child(1) { height: 10px; animation-delay: 0s; }
@@ -159,49 +155,37 @@
     </div>
   
     <div class="app">
-      <!-- Main Live Screen -->
-      <div id="channelScreen" style="display: flex; flex-direction: column; gap: 1.25rem;">
-      <div class="header">
-        <div class="logo">
-          <div class="logo-icon">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter">
-              <path d="M12 1v10M12 11a3 3 0 0 0-3 3v4a3 3 0 0 0 6 0v-4a3 3 0 0 0-3-3z"/>
-              <path d="M19 14v2a7 7 0 0 1-14 0v-2"/>
-              <line x1="12" y1="23" x2="12" y2="23"/>
-              <line x1="8" y1="23" x2="16" y2="23"/>
-            </svg>
+          <div id="channelScreen" style="display: flex; flex-direction: row; gap: 1.5rem; align-items: center; height: 100%; width: max-content; padding: 0 1.5rem; margin: 0 auto;">
+                  <div class="header">
+                    <input type="text" id="myIdInput" class="big-id-input" placeholder="INIT...">
+                  </div>
+          
+                  <div class="status-bar" id="statusBar" title="Connection Status">
+                    <div class="status-dot connected"></div>
+                    <span id="statusText" style="display: none;">CONNECTING...</span>
+                  </div>
+          
+                  <!-- Controls Card -->
+                  <div class="card">
+                    <div class="waveform" id="waveform">
+                      <span></span><span></span><span></span><span></span><span></span>
+                    </div>
+                    <button id="acceptCallBtn" class="btn">ACCEPT</button>
+                    <button id="cutCallBtn" class="btn">MUTE</button>
+                    <button id="buzzAllBtn" class="btn" title="GLOBAL BUZZ" style="padding: 0 1rem;">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M22 17H2c0-1.5 1.5-2.5 1.5-2.5V10a8.5 8.5 0 0 1 17 0v4.5S22 15.5 22 17z"></path>
+                        <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+                      </svg>
+                    </button>
+                  </div>
+            
+            <!-- Network Presence Card -->
+            <div class="card">
+              <ul class="members-list" id="membersList"></ul>
+            </div>
           </div>
-          <h1>LIVE LINE</h1>
         </div>
-        <!-- BIG EDITABLE ID -->
-        <input type="text" id="myIdInput" class="big-id-input" placeholder="INIT...">
-      </div>
-
-      <div class="status-bar" id="statusBar">
-        <div class="status-dot connected"></div>
-        <span id="statusText">CONNECTING...</span>
-      </div>
-
-      <!-- Controls Card -->
-      <div class="card" style="text-align: center;">
-        <div class="card-label">Comm Link</div>
-        
-        <div class="waveform" id="waveform">
-          <span></span><span></span><span></span><span></span><span></span>
-        </div>
-
-        <button id="acceptCallBtn" class="btn">ACCEPT CALL</button>
-        <button id="cutCallBtn" class="btn">CUT CALL (MUTE)</button>
-        <button id="buzzAllBtn" class="btn">TRANSMIT GLOBAL BUZZ</button>
-      </div>
-      
-      <!-- Network Presence Card -->
-      <div class="card">
-        <div class="card-label">Connected Nodes</div>
-        <ul class="members-list" id="membersList"></ul>
-      </div>
-    </div>
-  </div>
 
   <div id="buzzToast" class="buzz-toast">
     <span id="buzzToastText">BUZZ</span>
@@ -295,20 +279,21 @@
     const videoCard = document.getElementById('videoCard');
         const localVideo = document.getElementById('localVideo');
     
-        // Dynamic Video Grid Calculator
-        function updateVideoGrid() {
-          const wrappers = document.querySelectorAll('.video-wrapper');
-          const count = wrappers.length;
-          if (count === 0) return;
-          
-          const cols = Math.ceil(Math.sqrt(count));
-          const rows = Math.ceil(count / cols);
-          
-          wrappers.forEach(w => {
-            w.style.width = `${100 / cols}%`;
-            w.style.height = `${100 / rows}%`;
-          });
-        }
+        // Dynamic Video Grid Calculator (Horizontal Split)
+                function updateVideoGrid() {
+                  const wrappers = document.querySelectorAll('.video-wrapper');
+                  const count = wrappers.length;
+                  if (count === 0) return;
+                  
+                  // Prioritize rows over columns to stack videos top-to-bottom
+                  const rows = Math.ceil(Math.sqrt(count));
+                  const cols = Math.ceil(count / rows);
+                  
+                  wrappers.forEach(w => {
+                    w.style.width = `${100 / cols}%`;
+                    w.style.height = `${100 / rows}%`;
+                  });
+                }
         window.addEventListener('resize', updateVideoGrid);
     
         // Handle manual edits to the assigned ID
@@ -531,13 +516,13 @@
       try { audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)(); audioCtx.resume(); } catch(e){}
       
       const now = Date.now();
-      if (buzzCooldowns[targetUid] && now < buzzCooldowns[targetUid]) return;
-      buzzCooldowns[targetUid] = now + BUZZ_COOLDOWN_MS;
-      
-      const originalText = btnEl ? btnEl.textContent : null;
-      if (btnEl) { btnEl.disabled = true; btnEl.textContent = 'TX...'; }
-      
-      if (!isCommsLive) {
+            if (buzzCooldowns[targetUid] && now < buzzCooldowns[targetUid]) return;
+            buzzCooldowns[targetUid] = now + BUZZ_COOLDOWN_MS;
+            
+            const originalHTML = btnEl ? btnEl.innerHTML : null;
+            if (btnEl) { btnEl.disabled = true; btnEl.innerHTML = 'TX..'; }
+            
+            if (!isCommsLive) {
         await attemptMediaRecovery();
         if (hasMedia) {
            isCommsLive = true;
@@ -759,12 +744,12 @@
           nameWrap.className = 'member-name';
           
           const dot = document.createElement('span');
-          dot.className = 'status-dot ' + (data.online ? 'connected' : 'error') + (data.speaking ? ' speaking' : '');
-          nameWrap.appendChild(dot);
-          
-          const label = data.name + (uid === myUid ? ' (SELF)' : '') + (data.speaking ? ' - LIVE' : ' - MUTED');
-          nameWrap.appendChild(document.createTextNode(label));
-          li.appendChild(nameWrap);
+                    dot.className = 'status-dot ' + (data.online ? 'connected' : 'error') + (data.speaking ? ' speaking' : '');
+                    nameWrap.appendChild(dot);
+                    
+                    const label = data.name;
+                    nameWrap.appendChild(document.createTextNode(label));
+                    li.appendChild(nameWrap);
           
           if (uid !== myUid) {
             const buzzBtn = document.createElement('button');

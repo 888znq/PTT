@@ -364,10 +364,42 @@
     let myName = localStorage.getItem('myName') || "";
 
     let localStream = null;
-    let keepAliveAudio = null;
-    const peers = {};
-    const candidateQueues = {};
-    const agentPresenceStates = {};
+        let keepAliveAudio = null;
+        const peers = {};
+        const candidateQueues = {};
+        const agentPresenceStates = {};
+        const reconnectAttempts = {};
+        const reconnectTimers = {};
+        const onlineUids = new Set();
+        const RECONNECT_BASE_MS = 1000;
+        const RECONNECT_MAX_MS = 30000;
+        const DISCONNECT_GRACE_MS = 5000;
+    
+        function cleanupPeer(uid) {
+          const wrapper = document.getElementById('video-wrapper-' + uid);
+          if (wrapper) {
+            wrapper.remove();
+            updateVideoGrid();
+          }
+          if (peers[uid]) {
+            if (peers[uid].connectionState !== 'closed') peers[uid].close();
+            delete peers[uid];
+          }
+        }
+    
+        function scheduleReconnect(targetUid) {
+          if (!onlineUids.has(targetUid)) return; // peer isn't present anymore - presence listener will handle it
+          if (reconnectTimers[targetUid]) return; // already scheduled
+          const attempt = (reconnectAttempts[targetUid] || 0) + 1;
+          reconnectAttempts[targetUid] = attempt;
+          const delay = Math.min(RECONNECT_BASE_MS * Math.pow(2, attempt - 1), RECONNECT_MAX_MS);
+          reconnectTimers[targetUid] = setTimeout(() => {
+            delete reconnectTimers[targetUid];
+            if (myUid > targetUid && onlineUids.has(targetUid) && (!peers[targetUid] || peers[targetUid].connectionState === 'closed')) {
+              initiateCall(targetUid);
+            }
+          }, delay);
+        }
 
     let isCommsLive = false; 
         let hasJoined = false;
@@ -815,19 +847,26 @@
       };
 
       pc.onconnectionstatechange = () => {
-              if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed' || pc.connectionState === 'closed') {
-                const wrapper = document.getElementById('video-wrapper-' + targetUid);
-                if (wrapper) {
-                  wrapper.remove();
-                  updateVideoGrid();
+              const state = pc.connectionState;
+              if (state === 'connected') {
+                reconnectAttempts[targetUid] = 0;
+                if (reconnectTimers[targetUid]) {
+                  clearTimeout(reconnectTimers[targetUid]);
+                  delete reconnectTimers[targetUid];
                 }
-                
-                if (peers[targetUid]) {
-            peers[targetUid].close();
-            delete peers[targetUid];
-          }
-        }
-      };
+              } else if (state === 'disconnected') {
+                // 'disconnected' is often transient and self-recovers - give ICE a grace period before tearing down
+                setTimeout(() => {
+                  if (peers[targetUid] === pc && pc.connectionState !== 'connected') {
+                    cleanupPeer(targetUid);
+                    scheduleReconnect(targetUid);
+                  }
+                }, DISCONNECT_GRACE_MS);
+              } else if (state === 'failed' || state === 'closed') {
+                cleanupPeer(targetUid);
+                scheduleReconnect(targetUid);
+              }
+            };
 
       peers[targetUid] = pc;
       return pc;
@@ -908,21 +947,19 @@
           const uid = docSnap.id;
           
           // Clear dead feeds if someone closes the app
-                    if (!data.online || (now - data.lastSeen > 60000)) {
-                      const wrapper = document.getElementById('video-wrapper-' + uid);
-                      if (wrapper) {
-                        wrapper.remove();
-                        updateVideoGrid();
-                      }
-                      
-                      if (peers[uid] && peers[uid].connectionState !== 'closed') {
-               peers[uid].close();
-               delete peers[uid];
-            }
-            return;
-          }
-
-          const wasLive = agentPresenceStates[uid];
+                              if (!data.online || (now - data.lastSeen > 60000)) {
+                                onlineUids.delete(uid);
+                                if (reconnectTimers[uid]) {
+                                  clearTimeout(reconnectTimers[uid]);
+                                  delete reconnectTimers[uid];
+                                }
+                                delete reconnectAttempts[uid];
+                                cleanupPeer(uid);
+                      return;
+                    }
+          
+                    onlineUids.add(uid);
+                    const wasLive = agentPresenceStates[uid];
           if (data.speaking && !wasLive && uid !== myUid) {
              playConnectBeep();
           }
@@ -1087,9 +1124,11 @@
                 listenForBuzzes();
                 startAdaptiveMonitor();
 
-        window.addEventListener('beforeunload', () => {
-          setDoc(doc(db, 'family_presence', myUid), { name: myName, online: false, speaking: false }, { merge: true });
-        });
+        const markOffline = () => {
+                  setDoc(doc(db, 'family_presence', myUid), { name: myName, online: false, speaking: false }, { merge: true }).catch(() => {});
+                };
+                window.addEventListener('beforeunload', markOffline);
+                window.addEventListener('pagehide', markOffline);
         
         if(isCommsLive) {
            cutCallBtn.style.display = 'block';

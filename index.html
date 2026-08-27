@@ -594,12 +594,14 @@
       }
       
       const remoteVideos = document.querySelectorAll('#videoGrid video:not(#localVideo)');
-      remoteVideos.forEach(v => {
-        v.muted = !isCommsLive;
-        if (isCommsLive) {
-           v.play().catch(() => {}); 
-        }
-      });
+            remoteVideos.forEach(v => {
+              if (isCommsLive) {
+                v.muted = true;
+                v.play().then(() => { v.muted = false; }).catch(() => {});
+              } else {
+                v.muted = true;
+              }
+            });
 
       if (isCommsLive) {
         waveform.classList.add('active');
@@ -826,34 +828,41 @@
                   }
 
       pc.ontrack = (event) => {
-        // Create remote video wrapper if it doesn't exist
-        let wrapper = document.getElementById('video-wrapper-' + targetUid);
-        if (!wrapper) {
-          wrapper = document.createElement('div');
-          wrapper.className = 'video-wrapper active';
-          wrapper.id = 'video-wrapper-' + targetUid;
-          
-          const vid = document.createElement('video');
-          vid.id = 'video-' + targetUid;
-          vid.autoplay = true;
-          vid.playsInline = true;
-          
-          const label = document.createElement('div');
-          label.className = 'video-label';
-          label.textContent = 'NODE ' + targetUid;
-          
-          wrapper.appendChild(vid);
-                    wrapper.appendChild(label);
-                    document.getElementById('videoGrid').appendChild(wrapper);
-                    updateVideoGrid();
-                  }
-                  
-                  const videoEl = document.getElementById('video-' + targetUid);
-        videoEl.srcObject = event.streams[0];
-        videoEl.muted = !isCommsLive; 
-        
-        if (isCommsLive) videoEl.play().catch(() => {});
-      };
+              // Create remote video wrapper if it doesn't exist
+              let wrapper = document.getElementById('video-wrapper-' + targetUid);
+              if (!wrapper) {
+                wrapper = document.createElement('div');
+                wrapper.className = 'video-wrapper active';
+                wrapper.id = 'video-wrapper-' + targetUid;
+                
+                const vid = document.createElement('video');
+                vid.id = 'video-' + targetUid;
+                vid.autoplay = true;
+                vid.playsInline = true;
+                vid.muted = true;
+                
+                const label = document.createElement('div');
+                label.className = 'video-label';
+                label.textContent = 'NODE ' + targetUid;
+                
+                wrapper.appendChild(vid);
+                          wrapper.appendChild(label);
+                          document.getElementById('videoGrid').appendChild(wrapper);
+                          updateVideoGrid();
+                        }
+                        
+                        const videoEl = document.getElementById('video-' + targetUid);
+              videoEl.srcObject = event.streams[0];
+              // Start muted so autoplay is never blocked (works on Safari/iOS/Chrome alike),
+              // then unmute right after playback actually starts so speaker audio works on every device.
+              videoEl.muted = true;
+              videoEl.play().then(() => {
+                videoEl.muted = !isCommsLive;
+              }).catch(() => {
+                // Still blocked - updateMediaState() will retry the mute/play state on the next
+                // user action (Accept/Mute tap).
+              });
+            };
 
       pc.onicecandidate = (event) => {
         if (event.candidate) {

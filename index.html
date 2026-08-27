@@ -337,13 +337,13 @@
        if (!hasMedia) {
         try {
           // Attempt Video + Audio first
-          localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                    localStream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 24, max: 30 } }, audio: { echoCancellation: true, noiseSuppression: true, sampleRate: 48000 } });
           localVideo.srcObject = localStream;
           hasMedia = true;
         } catch (e) {
           try {
             // Fallback to Audio only if camera denied or absent
-            localStream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
+                        localStream = await navigator.mediaDevices.getUserMedia({ video: false, audio: { echoCancellation: true, noiseSuppression: true, sampleRate: 48000 } });
             hasMedia = true;
           } catch(err) {
             alert("A/V DENIED BY OS SETTINGS.");
@@ -352,8 +352,16 @@
         }
         
         Object.values(peers).forEach(pc => {
-          localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
-        });
+                  localStream.getTracks().forEach(track => {
+                    const sender = pc.addTrack(track, localStream);
+                    if (track.kind === 'video') {
+                      const params = sender.getParameters();
+                      if (!params.encodings) params.encodings = [{}];
+                      params.encodings[0].maxBitrate = 3000000;
+                      sender.setParameters(params).catch(() => {});
+                    }
+                  });
+                });
       }
     }
 
@@ -585,8 +593,16 @@
       candidateQueues[targetUid] = [];
 
       if (localStream) {
-        localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
-      }
+              localStream.getTracks().forEach(track => {
+                const sender = pc.addTrack(track, localStream);
+                if (track.kind === 'video') {
+                  const params = sender.getParameters();
+                  if (!params.encodings) params.encodings = [{}];
+                  params.encodings[0].maxBitrate = 3000000;
+                  sender.setParameters(params).catch(() => {});
+                }
+              });
+            }
 
       pc.ontrack = (event) => {
         // Create remote video wrapper if it doesn't exist
@@ -850,14 +866,14 @@
       }
 
       // 2. Initialize Media (Video + Audio)
-      try {
-        localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+            try {
+              localStream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 24, max: 30 } }, audio: { echoCancellation: true, noiseSuppression: true, sampleRate: 48000 } });
         localVideo.srcObject = localStream;
         hasMedia = true;
       } catch (e) {
         // Fallback to audio if video is blocked
-        try {
-           localStream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
+                try {
+                   localStream = await navigator.mediaDevices.getUserMedia({ video: false, audio: { echoCancellation: true, noiseSuppression: true, sampleRate: 48000 } });
            hasMedia = true;
         } catch(err) {
            hasMedia = false;

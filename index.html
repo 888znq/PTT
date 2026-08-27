@@ -173,7 +173,7 @@
                     </div>
                     <button id="acceptCallBtn" class="btn">ACCEPT</button>
                     <button id="cutCallBtn" class="btn">MUTE</button>
-                    <button id="buzzAllBtn" class="btn" title="GLOBAL BUZZ" style="padding: 0 1rem;">
+                    <button id="buzzAllBtn" class="btn" title="GLOBAL BUZZ" style="padding: 0 1rem; display: none;">
                       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M22 17H2c0-1.5 1.5-2.5 1.5-2.5V10a8.5 8.5 0 0 1 17 0v4.5S22 15.5 22 17z"></path>
                         <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
@@ -256,6 +256,108 @@
     }
 
     const servers = { iceServers: [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }] };
+    
+        // ---- Adaptive Quality: device capability detection ----
+        const QUALITY_PROFILES = {
+          low:    { width: 480,  height: 360, frameRate: 15, maxBitrate: 350000,  audioSampleRate: 24000 },
+          medium: { width: 960,  height: 540, frameRate: 20, maxBitrate: 1200000, audioSampleRate: 48000 },
+          high:   { width: 1280, height: 720, frameRate: 24, maxBitrate: 3000000, audioSampleRate: 48000 }
+        };
+        let currentTier = 'medium';
+        let currentProfile = QUALITY_PROFILES.medium;
+    
+        function measureScreenRefreshRate() {
+          return new Promise((resolve) => {
+            let frames = 0;
+            const start = performance.now();
+            function tick(now) {
+              frames++;
+              if (now - start < 400) {
+                requestAnimationFrame(tick);
+              } else {
+                resolve(Math.round((frames * 1000) / (now - start)));
+              }
+            }
+            requestAnimationFrame(tick);
+          });
+        }
+    
+        async function detectDeviceTier() {
+          const cores = navigator.hardwareConcurrency || 2;
+          const memory = navigator.deviceMemory || 4; // undefined on iOS/Firefox, assume mid-range
+          const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+          const netType = conn ? conn.effectiveType : '4g';
+          const saveData = conn ? !!conn.saveData : false;
+          const refreshRate = await measureScreenRefreshRate();
+    
+          let score = 0;
+          if (cores >= 6) score += 2; else if (cores >= 4) score += 1;
+          if (memory >= 6) score += 2; else if (memory >= 4) score += 1;
+          if (refreshRate >= 50) score += 2; else if (refreshRate >= 30) score += 1;
+          if (netType === '4g') score += 1;
+          if (saveData || netType === '2g' || netType === 'slow-2g') score -= 2;
+    
+          let tier = 'medium';
+          if (score <= 2) tier = 'low';
+          else if (score >= 6) tier = 'high';
+    
+          currentTier = tier;
+          currentProfile = QUALITY_PROFILES[tier];
+          return currentProfile;
+        }
+    
+        function applyDegradationPreference(pc) {
+          pc.getSenders().forEach((sender) => {
+            if (sender.track && sender.track.kind === 'video') {
+              try {
+                sender.setParameters(Object.assign({}, sender.getParameters(), {
+                  degradationPreference: currentTier === 'low' ? 'maintain-framerate' : 'balanced'
+                }));
+              } catch (e) {}
+            }
+          });
+        }
+    
+        function applyBitrateToSender(sender) {
+          try {
+            const params = sender.getParameters();
+            if (!params.encodings) params.encodings = [{}];
+            params.encodings[0].maxBitrate = currentProfile.maxBitrate;
+            sender.setParameters(params).catch(() => {});
+          } catch (e) {}
+        }
+    
+        // Live re-adaptation: watch actual outbound video fps and downgrade further if the device can't keep up
+        function startAdaptiveMonitor() {
+          setInterval(async () => {
+            for (const uid in peers) {
+              const pc = peers[uid];
+              if (!pc || pc.connectionState !== 'connected') continue;
+              try {
+                const stats = await pc.getStats();
+                stats.forEach((report) => {
+                  if (report.type === 'outbound-rtp' && report.kind === 'video' && report.framesPerSecond) {
+                    if (report.framesPerSecond < currentProfile.frameRate * 0.6 && currentTier !== 'low') {
+                      currentTier = currentTier === 'high' ? 'medium' : 'low';
+                      currentProfile = QUALITY_PROFILES[currentTier];
+                      const vTrack = localStream && localStream.getVideoTracks()[0];
+                      if (vTrack) {
+                        vTrack.applyConstraints({
+                          width: { ideal: currentProfile.width },
+                          height: { ideal: currentProfile.height },
+                          frameRate: { ideal: currentProfile.frameRate }
+                        }).catch(() => {});
+                      }
+                      Object.values(peers).forEach((p) => {
+                        p.getSenders().forEach((s) => { if (s.track && s.track.kind === 'video') applyBitrateToSender(s); });
+                      });
+                    }
+                  }
+                });
+              } catch (e) {}
+            }
+          }, 8000);
+        }
 
     const myUid = localStorage.getItem('myUid') || Math.random().toString(36).substring(2, 10);
     localStorage.setItem('myUid', myUid);
@@ -268,9 +370,22 @@
     const agentPresenceStates = {};
 
     let isCommsLive = false; 
-    let hasJoined = false;
-    let hasMedia = false;
-    let ringingInterval = null; 
+        let hasJoined = false;
+        let hasMedia = false;
+        let ringingInterval = null; 
+        let videoDevices = [];
+            let currentDeviceIndex = 0;
+            let lastTapTime = 0;
+        
+            async function getVideoDevices() {
+              try {
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                videoDevices = devices.filter(function (d) { return d.kind === 'videoinput'; });
+              } catch (e) {
+                videoDevices = [];
+              }
+              return videoDevices;
+            } 
     
     const waveform = document.getElementById('waveform');
     const acceptCallBtn = document.getElementById('acceptCallBtn');
@@ -296,6 +411,83 @@
                   });
                 }
         window.addEventListener('resize', updateVideoGrid);
+        
+            async function switchCamera() {
+                  if (!localStream) return;
+                  await getVideoDevices();
+                  if (videoDevices.length < 2) return; // Only one camera on this device - nothing to switch to
+            
+                  const oldVideoTrack = localStream.getVideoTracks()[0];
+                  const oldSettings = oldVideoTrack ? oldVideoTrack.getSettings() : {};
+                  let idx = videoDevices.findIndex(function (d) { return d.deviceId === oldSettings.deviceId; });
+                  if (idx === -1) idx = currentDeviceIndex;
+                  currentDeviceIndex = (idx + 1) % videoDevices.length;
+                  const nextDeviceId = videoDevices[currentDeviceIndex].deviceId;
+            
+                  try {
+                          const newStream = await navigator.mediaDevices.getUserMedia({
+                            video: {
+                              deviceId: { exact: nextDeviceId },
+                              width: { ideal: currentProfile.width },
+                              height: { ideal: currentProfile.height },
+                              frameRate: { ideal: currentProfile.frameRate, max: currentProfile.frameRate }
+                            },
+                            audio: false
+                          });
+                    const newVideoTrack = newStream.getVideoTracks()[0];
+                    if (!newVideoTrack) return;
+            
+                    Object.values(peers).forEach(function (pc) {
+                      const sender = pc.getSenders().find(function (s) { return s.track && s.track.kind === 'video'; });
+                      if (sender) sender.replaceTrack(newVideoTrack).catch(function () {});
+                    });
+            
+                    if (oldVideoTrack) {
+                      localStream.removeTrack(oldVideoTrack);
+                      oldVideoTrack.stop();
+                    }
+                    localStream.addTrack(newVideoTrack);
+                    newVideoTrack.enabled = isCommsLive;
+                    localVideo.srcObject = localStream;
+            
+                    const newSettings = newVideoTrack.getSettings();
+                    if (newSettings.facingMode) {
+                      localVideo.classList.toggle('mirrored', newSettings.facingMode === 'user');
+                    } else {
+                      localVideo.classList.toggle('mirrored', currentDeviceIndex === 0);
+                    }
+                  } catch (e) {
+                    alert("CAMERA SWITCH FAILED.");
+                  }
+                }
+        
+            (function setupDoubleTapCameraSwitch() {
+                      const wrapperEl = document.getElementById('localVideoWrapper');
+                      if (!wrapperEl) return;
+                      let lastSwitchTime = 0;
+                      const SWITCH_GUARD_MS = 500; // prevents touchend + native dblclick both firing for one gesture
+            
+                      function triggerSwitch() {
+                        const now = Date.now();
+                        if (now - lastSwitchTime < SWITCH_GUARD_MS) return; // already handled by the other event type
+                        lastSwitchTime = now;
+                        switchCamera();
+                      }
+            
+                      wrapperEl.addEventListener('touchend', function (e) {
+                        const now = Date.now();
+                        if (now - lastTapTime < 300) {
+                          e.preventDefault();
+                          triggerSwitch();
+                          lastTapTime = 0;
+                        } else {
+                          lastTapTime = now;
+                        }
+                      });
+                      wrapperEl.addEventListener('dblclick', function () {
+                        triggerSwitch();
+                      });
+                    })();
     
         // Handle manual edits to the assigned ID
     myIdInput.addEventListener('change', (e) => {
@@ -323,31 +515,29 @@
        if (!hasMedia) {
         try {
           // Attempt Video + Audio first
-                    localStream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 24, max: 30 } }, audio: { echoCancellation: true, noiseSuppression: true, sampleRate: 48000 } });
-          localVideo.srcObject = localStream;
-          hasMedia = true;
-        } catch (e) {
-          try {
-            // Fallback to Audio only if camera denied or absent
-                        localStream = await navigator.mediaDevices.getUserMedia({ video: false, audio: { echoCancellation: true, noiseSuppression: true, sampleRate: 48000 } });
-            hasMedia = true;
-          } catch(err) {
-            alert("A/V DENIED BY OS SETTINGS.");
-            return;
-          }
-        }
-        
-        Object.values(peers).forEach(pc => {
-                  localStream.getTracks().forEach(track => {
-                    const sender = pc.addTrack(track, localStream);
-                    if (track.kind === 'video') {
-                      const params = sender.getParameters();
-                      if (!params.encodings) params.encodings = [{}];
-                      params.encodings[0].maxBitrate = 3000000;
-                      sender.setParameters(params).catch(() => {});
-                    }
-                  });
-                });
+                    localStream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: currentProfile.width }, height: { ideal: currentProfile.height }, frameRate: { ideal: currentProfile.frameRate, max: currentProfile.frameRate } }, audio: { echoCancellation: true, noiseSuppression: true, sampleRate: currentProfile.audioSampleRate } });
+                              localVideo.srcObject = localStream;
+                              hasMedia = true;
+                            } catch (e) {
+                              try {
+                                // Fallback to Audio only if camera denied or absent
+                                            localStream = await navigator.mediaDevices.getUserMedia({ video: false, audio: { echoCancellation: true, noiseSuppression: true, sampleRate: currentProfile.audioSampleRate } });
+                                hasMedia = true;
+                              } catch(err) {
+                                alert("A/V DENIED BY OS SETTINGS.");
+                                return;
+                              }
+                            }
+                            
+                            Object.values(peers).forEach(pc => {
+                                      localStream.getTracks().forEach(track => {
+                                        const sender = pc.addTrack(track, localStream);
+                                        if (track.kind === 'video') {
+                                          applyBitrateToSender(sender);
+                                        }
+                                      });
+                                      applyDegradationPreference(pc);
+                                    });
       }
     }
 
@@ -514,36 +704,36 @@
     }
 
     async function sendBuzz(targetUid, btnEl) {
-      try { audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)(); audioCtx.resume(); } catch(e){}
-      
-      const now = Date.now();
-            if (buzzCooldowns[targetUid] && now < buzzCooldowns[targetUid]) return;
-            buzzCooldowns[targetUid] = now + BUZZ_COOLDOWN_MS;
-            
-            const originalHTML = btnEl ? btnEl.innerHTML : null;
-            if (btnEl) { btnEl.disabled = true; btnEl.innerHTML = 'TX..'; }
-            
-            if (!isCommsLive) {
-        await attemptMediaRecovery();
-        if (hasMedia) {
-           isCommsLive = true;
-           updateMediaState();
-           cutCallBtn.style.display = 'block';
-           acceptCallBtn.style.display = 'none';
-           stopRinging();
+          try { audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)(); audioCtx.resume(); } catch(e){}
+          
+          const now = Date.now();
+                if (buzzCooldowns[targetUid] && now < buzzCooldowns[targetUid]) return;
+                buzzCooldowns[targetUid] = now + BUZZ_COOLDOWN_MS;
+                
+                const originalText = btnEl ? btnEl.textContent : null;
+                if (btnEl) { btnEl.disabled = true; btnEl.textContent = 'TX..'; }
+                
+                if (!isCommsLive) {
+            await attemptMediaRecovery();
+            if (hasMedia) {
+               isCommsLive = true;
+               updateMediaState();
+               cutCallBtn.style.display = 'block';
+               acceptCallBtn.style.display = 'none';
+               stopRinging();
+            }
+          }
+          
+          try {
+            await addDoc(collection(db, 'family_buzz'), { sender: myUid, senderName: myName, receiver: targetUid, timestamp: now });
+          } catch (e) {}
+          
+          relayPushBuzz(targetUid);
+          
+          if (btnEl) {
+            setTimeout(() => { btnEl.disabled = false; btnEl.textContent = originalText; }, BUZZ_COOLDOWN_MS);
+          }
         }
-      }
-      
-      try {
-        await addDoc(collection(db, 'family_buzz'), { sender: myUid, senderName: myName, receiver: targetUid, timestamp: now });
-      } catch (e) {}
-      
-      relayPushBuzz(targetUid);
-      
-      if (btnEl) {
-        setTimeout(() => { btnEl.disabled = false; btnEl.textContent = originalText; }, BUZZ_COOLDOWN_MS);
-      }
-    }
 
     function listenForBuzzes() {
       const qMine = query(collection(db, 'family_buzz'), where('receiver', '==', myUid));
@@ -579,16 +769,14 @@
       candidateQueues[targetUid] = [];
 
       if (localStream) {
-              localStream.getTracks().forEach(track => {
-                const sender = pc.addTrack(track, localStream);
-                if (track.kind === 'video') {
-                  const params = sender.getParameters();
-                  if (!params.encodings) params.encodings = [{}];
-                  params.encodings[0].maxBitrate = 3000000;
-                  sender.setParameters(params).catch(() => {});
-                }
-              });
-            }
+                    localStream.getTracks().forEach(track => {
+                      const sender = pc.addTrack(track, localStream);
+                      if (track.kind === 'video') {
+                        applyBitrateToSender(sender);
+                      }
+                    });
+                    applyDegradationPreference(pc);
+                  }
 
       pc.ontrack = (event) => {
         // Create remote video wrapper if it doesn't exist
@@ -851,20 +1039,21 @@
         myIdInput.value = myName;
       }
 
-      // 2. Initialize Media (Video + Audio)
-            try {
-              localStream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 24, max: 30 } }, audio: { echoCancellation: true, noiseSuppression: true, sampleRate: 48000 } });
-        localVideo.srcObject = localStream;
-        hasMedia = true;
-      } catch (e) {
-        // Fallback to audio if video is blocked
-                try {
-                   localStream = await navigator.mediaDevices.getUserMedia({ video: false, audio: { echoCancellation: true, noiseSuppression: true, sampleRate: 48000 } });
-           hasMedia = true;
-        } catch(err) {
-           hasMedia = false;
-        }
-      }
+      // 2. Detect device capability, then initialize Media (Video + Audio) at a matching quality tier
+            await detectDeviceTier();
+                  try {
+                    localStream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: currentProfile.width }, height: { ideal: currentProfile.height }, frameRate: { ideal: currentProfile.frameRate, max: currentProfile.frameRate } }, audio: { echoCancellation: true, noiseSuppression: true, sampleRate: currentProfile.audioSampleRate } });
+              localVideo.srcObject = localStream;
+              hasMedia = true;
+            } catch (e) {
+              // Fallback to audio if video is blocked
+                      try {
+                         localStream = await navigator.mediaDevices.getUserMedia({ video: false, audio: { echoCancellation: true, noiseSuppression: true, sampleRate: currentProfile.audioSampleRate } });
+                 hasMedia = true;
+              } catch(err) {
+                 hasMedia = false;
+              }
+            }
 
       if (localStream) {
                localStream.getTracks().forEach(t => t.enabled = true);
@@ -887,15 +1076,16 @@
           lastSeen: Date.now()
         });
         hasJoined = true;
+                
+                setInterval(() => {
+                    if (hasJoined) setDoc(doc(db, 'family_presence', myUid), { lastSeen: Date.now() }, { merge: true }).catch(()=>{});
+                }, 45000);
         
-        setInterval(() => {
-            if (hasJoined) setDoc(doc(db, 'family_presence', myUid), { lastSeen: Date.now() }, { merge: true }).catch(()=>{});
-        }, 45000);
-
-        subscribeToPush();
-        listenForSignals();
-        listenForPresence();
-        listenForBuzzes();
+                subscribeToPush();
+                listenForSignals();
+                listenForPresence();
+                listenForBuzzes();
+                startAdaptiveMonitor();
 
         window.addEventListener('beforeunload', () => {
           setDoc(doc(db, 'family_presence', myUid), { name: myName, online: false, speaking: false }, { merge: true });

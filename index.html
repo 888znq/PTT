@@ -2,6 +2,61 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <script>
+    // Fires the camera/mic request in the very first possible tick - before the Firebase-based
+    // app script further down has even started downloading its (large, network-fetched) ES module
+    // dependencies. That module script cannot execute a single line, including its own
+    // getUserMedia() call, until those imports resolve, so acquiring the camera here instead means
+    // the permission prompt / hardware warm-up starts milliseconds after the link is opened rather
+    // than after Firebase has loaded.
+    (function () {
+      window.__QUALITY_PROFILES = {
+        low:    { width: 480,  height: 360, frameRate: 15, maxBitrate: 350000,  audioSampleRate: 24000 },
+        medium: { width: 960,  height: 540, frameRate: 20, maxBitrate: 1200000, audioSampleRate: 48000 },
+        high:   { width: 1280, height: 720, frameRate: 24, maxBitrate: 3000000, audioSampleRate: 48000 }
+      };
+
+      function detectDeviceTierEarly() {
+        var cores = navigator.hardwareConcurrency || 2;
+        var memory = navigator.deviceMemory || 4; // undefined on iOS/Firefox, assume mid-range
+        var conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+        var netType = conn ? conn.effectiveType : '4g';
+        var saveData = conn ? !!conn.saveData : false;
+
+        var score = 0;
+        if (cores >= 6) score += 2; else if (cores >= 4) score += 1;
+        if (memory >= 6) score += 2; else if (memory >= 4) score += 1;
+        if (netType === '4g') score += 1;
+        if (saveData || netType === '2g' || netType === 'slow-2g') score -= 2;
+
+        var tier = 'medium';
+        if (score <= 1) tier = 'low';
+        else if (score >= 4) tier = 'high';
+        return tier;
+      }
+
+      var tier = detectDeviceTierEarly();
+      var profile = window.__QUALITY_PROFILES[tier];
+      window.__earlyTier = tier;
+      window.__earlyProfile = profile;
+
+      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        window.__earlyMediaPromise = navigator.mediaDevices.getUserMedia({
+          video: { width: { ideal: profile.width }, height: { ideal: profile.height }, frameRate: { ideal: profile.frameRate, max: profile.frameRate } },
+          audio: { echoCancellation: true, noiseSuppression: true, sampleRate: profile.audioSampleRate }
+        }).catch(function () {
+          return navigator.mediaDevices.getUserMedia({
+            video: false,
+            audio: { echoCancellation: true, noiseSuppression: true, sampleRate: profile.audioSampleRate }
+          });
+        }).catch(function () {
+          return null;
+        });
+      } else {
+        window.__earlyMediaPromise = Promise.resolve(null);
+      }
+    })();
+  </script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Live Line - Tactical A/V</title>
   
@@ -1090,72 +1145,85 @@
     }
 
     // Auto-initialize when the app loads
-        window.addEventListener('DOMContentLoaded', async () => {
-          try { audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {}
-    
-          // 1. Grab the camera/mic THE INSTANT the page loads. detectDeviceTier() is now a synchronous,
-          // instant heuristic (no rAF wait), so this getUserMedia call fires within milliseconds of
-          // DOMContentLoaded instead of waiting on anything else first.
-          detectDeviceTier();
-          const mediaPromise = navigator.mediaDevices.getUserMedia({ video: { width: { ideal: currentProfile.width }, height: { ideal: currentProfile.height }, frameRate: { ideal: currentProfile.frameRate, max: currentProfile.frameRate } }, audio: { echoCancellation: true, noiseSuppression: true, sampleRate: currentProfile.audioSampleRate } })
-            .catch(() => navigator.mediaDevices.getUserMedia({ video: false, audio: { echoCancellation: true, noiseSuppression: true, sampleRate: currentProfile.audioSampleRate } }))
-            .catch(() => null);
-    
-          // 2. Fetch current users to determine the next ID - runs in PARALLEL with the camera request above, not before it
-          const idPromise = getDocs(collection(db, 'family_presence')).then((presenceSnap) => {
-            let maxId = 0;
-            const now = Date.now();
-            
-            presenceSnap.forEach((docSnap) => {
-              const data = docSnap.data();
-              if (data.online && (now - data.lastSeen < 60000) && data.name) {
-                const num = parseInt(data.name);
-                if (!isNaN(num) && num > maxId) {
-                  maxId = num;
-                }
+            window.addEventListener('DOMContentLoaded', async () => {
+              try { audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {}
+        
+              // 1. Reuse the camera/mic request already fired from the inline <head> script before
+              // Firebase even finished loading, instead of starting a brand new getUserMedia call here.
+              // Falls back to firing it fresh only if that early script somehow didn't run.
+              if (window.__earlyProfile) {
+                currentTier = window.__earlyTier;
+                currentProfile = window.__earlyProfile;
+              } else {
+                detectDeviceTier();
               }
-            });
-            
-            const nextIdNumber = maxId + 1;
-            myName = String(nextIdNumber).padStart(3, '0');
-            localStorage.setItem('myName', myName);
-            myIdInput.value = myName;
-    
-          }).catch((error) => {
-            console.error("Failed to assign ID, defaulting to 001", error);
-            myName = "001"; 
-            myIdInput.value = myName;
-          });
-    
-          const [mediaResult] = await Promise.all([mediaPromise, idPromise]);
-    
-          if (mediaResult) {
-            localStream = mediaResult;
-            hasMedia = true;
-            if (localStream.getVideoTracks().length > 0) {
-              localVideo.srcObject = localStream;
-            }
-          } else {
-            hasMedia = false;
-          }
-    
-          // Refine the quality tier in the background using the real screen refresh rate, without
-          // having delayed camera acquisition above for it.
-          refineDeviceTierInBackground();
-    
-          if (localStream) {
-                   localStream.getTracks().forEach(t => t.enabled = true);
-                   isCommsLive = true;
+              const mediaPromise = window.__earlyMediaPromise || navigator.mediaDevices.getUserMedia({ video: { width: { ideal: currentProfile.width }, height: { ideal: currentProfile.height }, frameRate: { ideal: currentProfile.frameRate, max: currentProfile.frameRate } }, audio: { echoCancellation: true, noiseSuppression: true, sampleRate: currentProfile.audioSampleRate } })
+                .catch(() => navigator.mediaDevices.getUserMedia({ video: false, audio: { echoCancellation: true, noiseSuppression: true, sampleRate: currentProfile.audioSampleRate } }))
+                .catch(() => null);
+        
+              // 2. The moment the stream is ready, show it. This is its own branch so it is never gated
+              // on the Firestore ID lookup below - a slow or cold Firestore connection can no longer
+              // delay when the camera appears.
+              const mediaReadyPromise = (async () => {
+                const mediaResult = await mediaPromise;
+                if (mediaResult) {
+                  localStream = mediaResult;
+                  hasMedia = true;
+                  if (localStream.getVideoTracks().length > 0) {
+                    localVideo.srcObject = localStream;
+                  }
                 } else {
-                   isCommsLive = false;
+                  hasMedia = false;
                 }
-          
+        
+                // Refine the quality tier in the background using the real screen refresh rate, without
+                // having delayed camera acquisition above for it.
+                refineDeviceTierInBackground();
+        
+                if (localStream) {
+                  localStream.getTracks().forEach(t => t.enabled = true);
+                  isCommsLive = true;
+                } else {
+                  isCommsLive = false;
+                }
+        
                 setupKeepAliveAudio();
                 updateMediaState();
                 updateVideoGrid(); // Init local scale
-
-      // 3. Register Presence and enter channel
-      try {
+              })();
+        
+              // 3. Fetch current users to determine the next ID - runs fully in parallel with the
+              // camera branch above; neither one waits on the other.
+              const idPromise = getDocs(collection(db, 'family_presence')).then((presenceSnap) => {
+                let maxId = 0;
+                const now = Date.now();
+                
+                presenceSnap.forEach((docSnap) => {
+                  const data = docSnap.data();
+                  if (data.online && (now - data.lastSeen < 60000) && data.name) {
+                    const num = parseInt(data.name);
+                    if (!isNaN(num) && num > maxId) {
+                      maxId = num;
+                    }
+                  }
+                });
+                
+                const nextIdNumber = maxId + 1;
+                myName = String(nextIdNumber).padStart(3, '0');
+                localStorage.setItem('myName', myName);
+                myIdInput.value = myName;
+        
+              }).catch((error) => {
+                console.error("Failed to assign ID, defaulting to 001", error);
+                myName = "001"; 
+                myIdInput.value = myName;
+              });
+        
+              // 4. Register Presence and enter channel once both branches above have settled - video
+              // display already happened without waiting for this.
+              await Promise.all([mediaReadyPromise, idPromise]);
+    
+          try {
         await setDoc(doc(db, 'family_presence', myUid), {
           name: myName,
           online: true,

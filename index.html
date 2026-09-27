@@ -282,29 +282,49 @@
           });
         }
     
-        async function detectDeviceTier() {
-          const cores = navigator.hardwareConcurrency || 2;
-          const memory = navigator.deviceMemory || 4; // undefined on iOS/Firefox, assume mid-range
-          const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
-          const netType = conn ? conn.effectiveType : '4g';
-          const saveData = conn ? !!conn.saveData : false;
-          const refreshRate = await measureScreenRefreshRate();
-    
-          let score = 0;
-          if (cores >= 6) score += 2; else if (cores >= 4) score += 1;
-          if (memory >= 6) score += 2; else if (memory >= 4) score += 1;
-          if (refreshRate >= 50) score += 2; else if (refreshRate >= 30) score += 1;
-          if (netType === '4g') score += 1;
-          if (saveData || netType === '2g' || netType === 'slow-2g') score -= 2;
-    
-          let tier = 'medium';
-          if (score <= 2) tier = 'low';
-          else if (score >= 6) tier = 'high';
-    
-          currentTier = tier;
-          currentProfile = QUALITY_PROFILES[tier];
-          return currentProfile;
-        }
+        function detectDeviceTier() {
+                  const cores = navigator.hardwareConcurrency || 2;
+                  const memory = navigator.deviceMemory || 4; // undefined on iOS/Firefox, assume mid-range
+                  const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+                  const netType = conn ? conn.effectiveType : '4g';
+                  const saveData = conn ? !!conn.saveData : false;
+        
+                  let score = 0;
+                  if (cores >= 6) score += 2; else if (cores >= 4) score += 1;
+                  if (memory >= 6) score += 2; else if (memory >= 4) score += 1;
+                  if (netType === '4g') score += 1;
+                  if (saveData || netType === '2g' || netType === 'slow-2g') score -= 2;
+        
+                  let tier = 'medium';
+                  if (score <= 1) tier = 'low';
+                  else if (score >= 4) tier = 'high';
+        
+                  currentTier = tier;
+                  currentProfile = QUALITY_PROFILES[tier];
+                  return currentProfile;
+                }
+        
+                // Refine the tier in the background using the real screen refresh rate, without blocking
+                // camera acquisition. If the device turns out weaker than the instant guess assumed,
+                // tighten constraints on the track that is already streaming instead of waiting to start it.
+                async function refineDeviceTierInBackground() {
+                  const refreshRate = await measureScreenRefreshRate();
+                  if (refreshRate < 30 && currentTier !== 'low') {
+                    currentTier = 'low';
+                    currentProfile = QUALITY_PROFILES.low;
+                    const vTrack = localStream && localStream.getVideoTracks()[0];
+                    if (vTrack) {
+                      vTrack.applyConstraints({
+                        width: { ideal: currentProfile.width },
+                        height: { ideal: currentProfile.height },
+                        frameRate: { ideal: currentProfile.frameRate }
+                      }).catch(() => {});
+                    }
+                    Object.values(peers).forEach((p) => {
+                      p.getSenders().forEach((s) => { if (s.track && s.track.kind === 'video') applyBitrateToSender(s); });
+                    });
+                  }
+                }
     
         function applyDegradationPreference(pc) {
           pc.getSenders().forEach((sender) => {
@@ -1070,62 +1090,69 @@
     }
 
     // Auto-initialize when the app loads
-    window.addEventListener('DOMContentLoaded', async () => {
-      try { audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {}
-
-      // 1. Fetch current users to determine the next ID
-      try {
-        const presenceSnap = await getDocs(collection(db, 'family_presence'));
-        let maxId = 0;
-        const now = Date.now();
-        
-        presenceSnap.forEach((docSnap) => {
-          const data = docSnap.data();
-          if (data.online && (now - data.lastSeen < 60000) && data.name) {
-            const num = parseInt(data.name);
-            if (!isNaN(num) && num > maxId) {
-              maxId = num;
-            }
-          }
-        });
-        
-        const nextIdNumber = maxId + 1;
-        myName = String(nextIdNumber).padStart(3, '0');
-        localStorage.setItem('myName', myName);
-        myIdInput.value = myName;
-
-      } catch (error) {
-        console.error("Failed to assign ID, defaulting to 001", error);
-        myName = "001"; 
-        myIdInput.value = myName;
-      }
-
-      // 2. Detect device capability, then initialize Media (Video + Audio) at a matching quality tier
-            await detectDeviceTier();
-                  try {
-                    localStream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: currentProfile.width }, height: { ideal: currentProfile.height }, frameRate: { ideal: currentProfile.frameRate, max: currentProfile.frameRate } }, audio: { echoCancellation: true, noiseSuppression: true, sampleRate: currentProfile.audioSampleRate } });
-              localVideo.srcObject = localStream;
-              hasMedia = true;
-            } catch (e) {
-              // Fallback to audio if video is blocked
-                      try {
-                         localStream = await navigator.mediaDevices.getUserMedia({ video: false, audio: { echoCancellation: true, noiseSuppression: true, sampleRate: currentProfile.audioSampleRate } });
-                 hasMedia = true;
-              } catch(err) {
-                 hasMedia = false;
+        window.addEventListener('DOMContentLoaded', async () => {
+          try { audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {}
+    
+          // 1. Grab the camera/mic THE INSTANT the page loads. detectDeviceTier() is now a synchronous,
+          // instant heuristic (no rAF wait), so this getUserMedia call fires within milliseconds of
+          // DOMContentLoaded instead of waiting on anything else first.
+          detectDeviceTier();
+          const mediaPromise = navigator.mediaDevices.getUserMedia({ video: { width: { ideal: currentProfile.width }, height: { ideal: currentProfile.height }, frameRate: { ideal: currentProfile.frameRate, max: currentProfile.frameRate } }, audio: { echoCancellation: true, noiseSuppression: true, sampleRate: currentProfile.audioSampleRate } })
+            .catch(() => navigator.mediaDevices.getUserMedia({ video: false, audio: { echoCancellation: true, noiseSuppression: true, sampleRate: currentProfile.audioSampleRate } }))
+            .catch(() => null);
+    
+          // 2. Fetch current users to determine the next ID - runs in PARALLEL with the camera request above, not before it
+          const idPromise = getDocs(collection(db, 'family_presence')).then((presenceSnap) => {
+            let maxId = 0;
+            const now = Date.now();
+            
+            presenceSnap.forEach((docSnap) => {
+              const data = docSnap.data();
+              if (data.online && (now - data.lastSeen < 60000) && data.name) {
+                const num = parseInt(data.name);
+                if (!isNaN(num) && num > maxId) {
+                  maxId = num;
+                }
               }
+            });
+            
+            const nextIdNumber = maxId + 1;
+            myName = String(nextIdNumber).padStart(3, '0');
+            localStorage.setItem('myName', myName);
+            myIdInput.value = myName;
+    
+          }).catch((error) => {
+            console.error("Failed to assign ID, defaulting to 001", error);
+            myName = "001"; 
+            myIdInput.value = myName;
+          });
+    
+          const [mediaResult] = await Promise.all([mediaPromise, idPromise]);
+    
+          if (mediaResult) {
+            localStream = mediaResult;
+            hasMedia = true;
+            if (localStream.getVideoTracks().length > 0) {
+              localVideo.srcObject = localStream;
             }
-
-      if (localStream) {
-               localStream.getTracks().forEach(t => t.enabled = true);
-               isCommsLive = true;
-            } else {
-               isCommsLive = false;
-            }
-      
-            setupKeepAliveAudio();
-            updateMediaState();
-            updateVideoGrid(); // Init local scale
+          } else {
+            hasMedia = false;
+          }
+    
+          // Refine the quality tier in the background using the real screen refresh rate, without
+          // having delayed camera acquisition above for it.
+          refineDeviceTierInBackground();
+    
+          if (localStream) {
+                   localStream.getTracks().forEach(t => t.enabled = true);
+                   isCommsLive = true;
+                } else {
+                   isCommsLive = false;
+                }
+          
+                setupKeepAliveAudio();
+                updateMediaState();
+                updateVideoGrid(); // Init local scale
 
       // 3. Register Presence and enter channel
       try {

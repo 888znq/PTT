@@ -1069,7 +1069,21 @@
     const RECONNECT_MAX_MS = 15000;
     const DISCONNECT_GRACE_MS = 4000;
 
+    function removeScreenPane(uid) {
+      const screenPane = document.getElementById('screen-pane-' + uid);
+      if (screenPane) {
+        const sv = screenPane.querySelector('video');
+        if (sv && sv.srcObject instanceof MediaStream) {
+          sv.srcObject.getTracks().forEach((t) => { try { t.stop(); } catch (e) {} });
+          sv.srcObject = null;
+        }
+        screenPane.remove();
+        updateVideoGrid();
+      }
+    }
+
     function cleanupPeer(uid) {
+      removeScreenPane(uid);
       const wrapper = document.getElementById('video-wrapper-' + uid);
       if (wrapper) {
         wrapper.remove();
@@ -1260,7 +1274,15 @@
         function setPeerVideoTrack(pc, track) {
           var trs = pc.getTransceivers().filter((t) => t.receiver && t.receiver.track && t.receiver.track.kind === 'video' && t.mid !== null);
           var tr = trs.find((t) => t.currentDirection === 'sendrecv' || t.currentDirection === 'sendonly') || trs[0];
-          if (!tr) return;
+          if (!tr) {
+            if (track && typeof pc.addTransceiver === 'function') {
+              try {
+                pc.addTransceiver(track, { direction: 'sendonly' });
+                applySenderParameters(pc);
+              } catch (e) {}
+            }
+            return;
+          }
           tr.sender.replaceTrack(track).then(() => applySenderParameters(pc)).catch(() => {});
         }
     
@@ -1415,6 +1437,9 @@
                     var w = document.getElementById(uid === myUid ? 'localVideoWrapper' : 'video-wrapper-' + uid);
                     var t = w && w.querySelector('.pane-num-text');
                     if (t) t.textContent = fmtNode(peerNames[uid]);
+                    var sw = document.getElementById('screen-pane-' + uid);
+                    var st = sw && sw.querySelector('.pane-num-text');
+                    if (st) st.textContent = fmtNode(peerNames[uid]) + ' SCR';
                   });
                 }
             
@@ -1758,17 +1783,10 @@
           wrapper.id = 'video-wrapper-' + targetUid;
 
           const vid = document.createElement('video');
-                    vid.id = 'video-' + targetUid;
-                    vid.autoplay = true;
-                    vid.playsInline = true;
-                    vid.muted = true;
-          
-                    const screenVid = document.createElement('video');
-                    screenVid.id = 'screen-video-' + targetUid;
-                    screenVid.autoplay = true;
-                    screenVid.playsInline = true;
-                    screenVid.muted = true;
-                    screenVid.style.display = 'none';
+          vid.id = 'video-' + targetUid;
+          vid.autoplay = true;
+          vid.playsInline = true;
+          vid.muted = true;
 
           const label = document.createElement('div');
           label.className = 'video-label';
@@ -1802,21 +1820,77 @@
         }
 
         const videoEl = document.getElementById('video-' + targetUid);
-                const screenVideoEl = document.getElementById('screen-video-' + targetUid);
-                const isScreenTrack = event.track.kind === 'video' && (!!peerSharing[targetUid] || (videoEl.srcObject instanceof MediaStream && videoEl.srcObject.getVideoTracks().length > 0 && videoEl.srcObject.getVideoTracks()[0] !== event.track));
-                const targetEl = isScreenTrack && screenVideoEl ? screenVideoEl : videoEl;
-                var remoteMs = targetEl.srcObject instanceof MediaStream ? targetEl.srcObject : new MediaStream();
-                        if (remoteMs.getTracks().indexOf(event.track) === -1) remoteMs.addTrack(event.track);
-                        if (targetEl.srcObject !== remoteMs) targetEl.srcObject = remoteMs;
-                        if (screenVideoEl && event.track.kind === 'video') {
-                          screenVideoEl.style.display = isScreenTrack ? 'block' : 'none';
-                          videoEl.style.display = isScreenTrack ? 'none' : 'block';
-                        }
-                        wrapper.classList.toggle('screen-share', !!peerSharing[targetUid]);
-                targetEl.muted = true;
-                targetEl.play().then(() => {
-                  targetEl.muted = !isCommsLive || tabHidden;
-                }).catch(() => {});
+        const existingTracks = (videoEl && videoEl.srcObject instanceof MediaStream) ? videoEl.srcObject.getTracks() : [];
+        const hasExistingSameKindTrack = existingTracks.some((t) => t.kind === event.track.kind && t.id !== event.track.id);
+        const useSeparateScreenPane = event.track.kind === 'video' && (hasExistingSameKindTrack || (!!peerSharing[targetUid] && existingTracks.some((t) => t.kind === 'video')));
+
+        if (useSeparateScreenPane) {
+          let screenPane = document.getElementById('screen-pane-' + targetUid);
+          if (!screenPane) {
+            screenPane = document.createElement('div');
+            screenPane.className = 'video-wrapper active screen-share';
+            screenPane.id = 'screen-pane-' + targetUid;
+
+            const screenVid = document.createElement('video');
+            screenVid.id = 'screen-video-' + targetUid;
+            screenVid.autoplay = true;
+            screenVid.playsInline = true;
+            screenVid.muted = true;
+
+            const screenLabel = document.createElement('div');
+            screenLabel.className = 'video-label';
+            screenLabel.id = 'screen-label-' + targetUid;
+            screenLabel.innerHTML = `<span>NODE ${targetUid} SCREEN</span><span class="res-tag" id="remote-res-screen-${targetUid}">LIVE</span>`;
+
+            screenVid.addEventListener('loadedmetadata', () => {
+              const rTag = document.getElementById('remote-res-screen-' + targetUid);
+              if (rTag && screenVid.videoWidth) {
+                rTag.textContent = `${screenVid.videoWidth}×${screenVid.videoHeight}`;
+              }
+            });
+
+            screenPane.appendChild(screenVid);
+            screenPane.appendChild(screenLabel);
+
+            var sPaneNum = document.createElement('div');
+            sPaneNum.className = 'pane-num';
+            var sPaneNumText = document.createElement('span');
+            sPaneNumText.className = 'pane-num-text';
+            sPaneNum.appendChild(sPaneNumText);
+            screenPane.appendChild(sPaneNum);
+
+            document.getElementById('videoGrid').appendChild(screenPane);
+            refreshPaneNumbers();
+            updateVideoGrid();
+          }
+
+          const screenVideoEl = document.getElementById('screen-video-' + targetUid);
+          const screenMs = screenVideoEl.srcObject instanceof MediaStream ? screenVideoEl.srcObject : new MediaStream();
+          if (screenMs.getTracks().indexOf(event.track) === -1) screenMs.addTrack(event.track);
+          if (screenVideoEl.srcObject !== screenMs) screenVideoEl.srcObject = screenMs;
+
+          event.track.addEventListener('ended', () => {
+            screenMs.removeTrack(event.track);
+            if (screenMs.getTracks().length === 0) {
+              removeScreenPane(targetUid);
+            }
+          });
+
+          screenVideoEl.muted = true;
+          screenVideoEl.play().then(() => {
+            screenVideoEl.muted = !isCommsLive || tabHidden;
+          }).catch(() => {});
+          return;
+        }
+
+        var remoteMs = videoEl.srcObject instanceof MediaStream ? videoEl.srcObject : new MediaStream();
+                if (remoteMs.getTracks().indexOf(event.track) === -1) remoteMs.addTrack(event.track);
+                if (videoEl.srcObject !== remoteMs) videoEl.srcObject = remoteMs;
+                wrapper.classList.toggle('screen-share', !!peerSharing[targetUid]);
+        videoEl.muted = true;
+        videoEl.play().then(() => {
+          videoEl.muted = !isCommsLive || tabHidden;
+        }).catch(() => {});
       };
 
       pc.onicecandidate = (event) => {
@@ -1947,6 +2021,7 @@
                     peerSharing[uid] = !!data.sharing;
                     var peerWrap = document.getElementById('video-wrapper-' + uid);
                     if (peerWrap) peerWrap.classList.toggle('screen-share', peerSharing[uid]);
+                    if (!peerSharing[uid]) removeScreenPane(uid);
 
           const li = document.createElement('li');
           const nameWrap = document.createElement('div');

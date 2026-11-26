@@ -759,7 +759,7 @@
 
     function boostSdpForMobileLowLatency(sdp, profile) {
       if (!sdp) return sdp;
-      const maxKbps = Math.round(profile.maxBitrate / 1000);
+      const maxKbps = Math.max(6000, Math.round(profile.maxBitrate / 1000));
       const startKbps = Math.round((profile.startBitrate || 700000) / 1000);
       const minKbps = Math.round((profile.minBitrate || 250000) / 1000);
       const vPts = new Set();
@@ -803,12 +803,26 @@
           try {
             const params = sender.getParameters() || {};
             if (!params.encodings || !params.encodings.length) params.encodings = [{}];
-            params.encodings[0].maxBitrate = currentProfile.maxBitrate;
-            params.encodings[0].maxFramerate = currentProfile.frameRate;
-            params.encodings[0].scaleResolutionDownBy = 1.0;
-            params.encodings[0].priority = 'medium';
-            params.encodings[0].networkPriority = 'medium';
-            params.degradationPreference = currentProfile.degradation || 'maintain-framerate';
+            var isScr = false;
+                        try { isScr = !!(sender.track.getSettings().displaySurface); } catch (e1) {}
+                        if (!isScr) { try { isScr = (typeof screenTrack !== 'undefined' && sender.track === screenTrack); } catch (e2) {} }
+                        if (isScr) {
+                          var scrW = 0;
+                          try { scrW = sender.track.getSettings().width || 0; } catch (e3) {}
+                          params.encodings[0].maxBitrate = 6000000;
+                          params.encodings[0].maxFramerate = 30;
+                          params.encodings[0].scaleResolutionDownBy = scrW > 1920 ? scrW / 1920 : 1.0;
+                          params.encodings[0].priority = 'high';
+                          params.encodings[0].networkPriority = 'high';
+                          params.degradationPreference = 'maintain-framerate';
+                        } else {
+                          params.encodings[0].maxBitrate = currentProfile.maxBitrate;
+                          params.encodings[0].maxFramerate = currentProfile.frameRate;
+                          params.encodings[0].scaleResolutionDownBy = 1.0;
+                          params.encodings[0].priority = 'medium';
+                          params.encodings[0].networkPriority = 'medium';
+                          params.degradationPreference = currentProfile.degradation || 'maintain-framerate';
+                        }
             sender.setParameters(params).catch(() => {});
           } catch (e) {}
         } else if (sender.track.kind === 'audio') {
@@ -1308,7 +1322,7 @@
             screenStream = null;
             return;
           }
-          try { if ('contentHint' in screenTrack) screenTrack.contentHint = 'detail'; } catch (e) {}
+          try { if ('contentHint' in screenTrack) screenTrack.contentHint = 'motion'; } catch (e) {}
           screenTrack.addEventListener('ended', stopScreenShare);
           Object.values(peers).forEach((pc) => setPeerVideoTrack(pc, screenTrack));
           screenWasMirrored = localVideo.classList.contains('mirrored');

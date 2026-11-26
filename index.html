@@ -1,0 +1,2177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <script>
+    // 4G/5G CELLULAR ZERO-BUFFERBLOAT & HARDWARE ASIC ENGINE
+    // Fires camera request in the first tick before Firebase modules download.
+    (function () {
+      var conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+      var isCellular = conn && (conn.type === 'cellular' || conn.effectiveType !== '4g');
+
+      window.__AUDIO_FX = localStorage.getItem('headsetMode') !== '1';
+      window.__QUALITY_PROFILES = {
+        ultra:  {
+          id: 'ultra',
+          label: '5G ULTRA 1080P60',
+          width: 1920,
+          height: 1080,
+          frameRate: 60,
+          maxBitrate: isCellular ? 3500000 : 6000000,
+          minBitrate: 300000,
+          startBitrate: 1800000,
+          audioSampleRate: 48000,
+          audioBitrate: 96000,
+          degradation: 'maintain-framerate',
+          contentHint: 'motion'
+        },
+        high:   {
+          id: 'high',
+          label: '4G/5G FAST 720P60',
+          width: 1280,
+          height: 720,
+          frameRate: 60,
+          maxBitrate: isCellular ? 2200000 : 3500000,
+          minBitrate: 250000,
+          startBitrate: 1400000,
+          audioSampleRate: 48000,
+          audioBitrate: 64000,
+          degradation: 'maintain-framerate',
+          contentHint: 'motion'
+        },
+        medium: {
+          id: 'medium',
+          label: '4G STABLE 720P30',
+          width: 1280,
+          height: 720,
+          frameRate: 30,
+          maxBitrate: 1400000,
+          minBitrate: 200000,
+          startBitrate: 900000,
+          audioSampleRate: 48000,
+          audioBitrate: 48000,
+          degradation: 'maintain-framerate',
+          contentHint: 'motion'
+        },
+        low:    {
+          id: 'low',
+          label: '4G LITE 480P30',
+          width: 854,
+          height: 480,
+          frameRate: 30,
+          maxBitrate: 750000,
+          minBitrate: 150000,
+          startBitrate: 500000,
+          audioSampleRate: 48000,
+          audioBitrate: 32000,
+          degradation: 'maintain-framerate',
+          contentHint: 'motion'
+        }
+      };
+
+      function runCpuMicroBench() {
+        var start = performance.now();
+        var ops = 0;
+        var x = 1.0001;
+        while (performance.now() - start < 10) {
+          for (var i = 0; i < 1000; i++) {
+            x = Math.sqrt(x * 1.00001 + i) + 0.0001;
+          }
+          ops += 1000;
+        }
+        var elapsed = Math.max(1, performance.now() - start);
+        return { opsPerMs: Math.round(ops / elapsed), dummy: x };
+      }
+
+      function detectGpuRenderer() {
+        try {
+          var c = document.createElement('canvas');
+          var gl = c.getContext('webgl') || c.getContext('experimental-webgl');
+          if (!gl) return 'Unavailable';
+          var dbg = gl.getExtension('WEBGL_debug_renderer_info');
+          return dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER);
+        } catch (e) {
+          return 'Standard GPU';
+        }
+      }
+
+      function scoreGpu(rendererStr) {
+        var r = (rendererStr || '').toLowerCase();
+        if (/apple gpu|adreno \(tm\) [789]\d\d|adreno [789]\d\d|immortalis|mali-g[789]\d|rtx|radeon rx|arc|iris xe|m[1234]/.test(r)) {
+          return { tier: 'Flagship HW ASIC', pts: 25 };
+        }
+        if (/adreno \(tm\) 6[456789]\d|adreno 6[456789]\d|mali-g[56]\d|uhd|geforce|radeon/.test(r)) {
+          return { tier: 'High-Perf HW ASIC', pts: 18 };
+        }
+        if (/adreno|mali|powervr/.test(r)) {
+          return { tier: 'Standard HW ASIC', pts: 12 };
+        }
+        return { tier: 'Generic GPU', pts: 15 };
+      }
+
+      function analyzeHardwareAndSelectTier() {
+        var cores = navigator.hardwareConcurrency || 4;
+        var memory = navigator.deviceMemory || null;
+        var netType = conn && conn.effectiveType ? conn.effectiveType : '4g';
+        var downlink = conn && typeof conn.downlink === 'number' ? conn.downlink : 10;
+        var rtt = conn && typeof conn.rtt === 'number' ? conn.rtt : 45;
+        var saveData = conn ? !!conn.saveData : false;
+        var dpr = window.devicePixelRatio || 1;
+
+        var bench = runCpuMicroBench();
+        var gpuRenderer = detectGpuRenderer();
+        var gpuEval = scoreGpu(gpuRenderer);
+
+        var score = 0;
+        if (cores >= 8) score += 25;
+        else if (cores >= 6) score += 20;
+        else if (cores >= 4) score += 12;
+        else score += 5;
+
+        if (bench.opsPerMs >= 32000) score += 30;
+        else if (bench.opsPerMs >= 18000) score += 22;
+        else if (bench.opsPerMs >= 10000) score += 14;
+        else score += 6;
+
+        var effectiveRam = memory !== null ? memory : (bench.opsPerMs >= 24000 ? 8 : 6);
+        if (effectiveRam >= 8) score += 20;
+        else if (effectiveRam >= 6) score += 16;
+        else if (effectiveRam >= 4) score += 10;
+        else score += 4;
+
+        score += gpuEval.pts;
+
+        var tier = 'high';
+        var processorClass = 'FAST CPU (4G/5G LOW-LAG)';
+        if (score >= 75) {
+          tier = (rtt <= 60 && downlink >= 10) ? 'ultra' : 'high';
+          processorClass = 'FAST PROCESSOR (HW ASIC 60FPS)';
+        } else if (score >= 56) {
+          tier = 'high';
+          processorClass = 'HIGH-SPEED CPU (HW ASIC 720P60)';
+        } else if (score >= 40) {
+          tier = 'medium';
+          processorClass = 'MID-RANGE CPU (HW ASIC 720P30)';
+        } else {
+          tier = 'low';
+          processorClass = 'LITE PROCESSOR (HW ASIC 480P30)';
+        }
+
+        if (saveData || netType === '2g' || netType === 'slow-2g') {
+          tier = 'low';
+        } else if (netType === '3g') {
+          tier = 'medium';
+        }
+
+        window.__HW_INFO = {
+          cores: cores,
+          memory: memory !== null ? memory + ' GB' : '~' + effectiveRam + ' GB',
+          rawMemory: effectiveRam,
+          cpuOpsPerMs: bench.opsPerMs,
+          gpuRenderer: gpuRenderer,
+          gpuClass: gpuEval.tier,
+          netType: netType.toUpperCase(),
+          downlinkMbps: downlink,
+          rttMs: rtt,
+          jitterMs: 0,
+          packetLossPct: 0,
+          playoutBufferMs: 25,
+          saveData: saveData,
+          dpr: dpr,
+          refreshRateHz: 60,
+          score: score,
+          processorClass: processorClass,
+          autoRecommendedTier: tier,
+          encoderType: 'HW H.264 ASIC',
+          activeRes: 'Initializing...',
+          activeFps: 0,
+          roundTripMs: rtt
+        };
+
+        return tier;
+      }
+
+      var tier = analyzeHardwareAndSelectTier();
+      var profile = window.__QUALITY_PROFILES[tier];
+      window.__earlyTier = tier;
+      window.__earlyProfile = profile;
+
+      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        window.__earlyMediaPromise = navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: { ideal: 'user' },
+            width: { ideal: profile.width },
+            height: { ideal: profile.height },
+            frameRate: { ideal: profile.frameRate }
+          },
+          audio: {
+            echoCancellation: window.__AUDIO_FX,
+            noiseSuppression: window.__AUDIO_FX,
+            autoGainControl: window.__AUDIO_FX,
+            sampleRate: profile.audioSampleRate,
+            latency: 0.01
+          }
+        }).catch(function () {
+          return navigator.mediaDevices.getUserMedia({
+            video: true,
+            audio: { echoCancellation: window.__AUDIO_FX, noiseSuppression: window.__AUDIO_FX }
+          });
+        }).catch(function () {
+          return navigator.mediaDevices.getUserMedia({
+            video: false,
+            audio: { echoCancellation: window.__AUDIO_FX, noiseSuppression: window.__AUDIO_FX }
+          });
+        }).catch(function () {
+          return null;
+        });
+      } else {
+        window.__earlyMediaPromise = Promise.resolve(null);
+      }
+    })();
+  </script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Live Line - Tactical A/V</title>
+
+  <link rel="manifest" href="./manifest.json">
+  <meta name="theme-color" content="#000432">
+  <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/3114/3114320.png">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;600&display=swap');
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #000432;
+      --text: #ffffff;
+      --accent-green: #00E676;
+      --accent-red: #FF2D3A;
+      --border: rgba(255, 255, 255, 0.25);
+      --border-dim: rgba(255, 255, 255, 0.12);
+      --muted: rgba(255, 255, 255, 0.55);
+    }
+
+    body {
+      font-family: 'IBM Plex Sans', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      height: 100vh;
+      margin: 0;
+      padding: 0;
+      touch-action: manipulation;
+      overflow: hidden;
+    }
+
+    #bgCanvas {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 0;
+      display: block;
+      opacity: 0.7;
+    }
+
+    .app {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      z-index: 10;
+      width: 100vw;
+      height: 5vh;
+      min-height: 54px;
+      overflow-x: auto;
+      overflow-y: hidden;
+      background: #000432;
+      border-top: 1px solid var(--border);
+    }
+    .app::-webkit-scrollbar { height: 4px; }
+        .video-label, .hw-hud-btn, .status-bar, .waveform, #cutCallBtn { display: none !important; }
+    .app::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); }
+
+    .header { display: flex; align-items: center; gap: 1rem; padding: 0; flex-shrink: 0; }
+
+    .big-id-input {
+      background: rgba(0, 4, 50, 0.9);
+      border: none;
+      border-bottom: 2px dashed var(--muted);
+      color: var(--text);
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 1.2rem;
+      font-weight: 600;
+      text-align: center;
+      width: 60px;
+      margin: 0;
+      padding: 0.1rem;
+      outline: none;
+      text-transform: uppercase;
+    }
+    .big-id-input:focus { border-bottom-color: var(--text); }
+        .header, #myIdInput { display: none !important; }
+
+    .card { background: transparent; border: none; padding: 0; display: flex; align-items: center; gap: 0.75rem; flex-shrink: 0; height: 100%; }
+
+    .status-bar { background: transparent; border: 1px solid var(--border); padding: 0 0.75rem; display: flex; align-items: center; gap: 0.5rem; font-family: 'IBM Plex Mono', monospace; font-size: 0.75rem; flex-shrink: 0; height: 36px; border-radius: 4px; }
+    .status-dot { width: 8px; height: 8px; background: transparent; border: 1px solid var(--muted); flex-shrink: 0; border-radius: 50%; }
+    .status-dot.connected { background: var(--accent-green); border-color: var(--accent-green); }
+    .status-dot.error { background: transparent; border: 1px dashed var(--muted); }
+    .status-dot.speaking { animation: pulseSpeak 0.8s ease-in-out infinite; }
+    @keyframes pulseSpeak { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.3; transform: scale(1.2); } }
+
+    .btn { background: rgba(0,0,0,0.5); color: var(--text); border: 1px solid var(--text); padding: 0 0.75rem; font-family: 'IBM Plex Mono', monospace; font-size: 0.75rem; font-weight: 600; cursor: pointer; letter-spacing: 0.05em; height: 36px; text-transform: uppercase; flex-shrink: 0; display: flex; align-items: center; justify-content: center; white-space: nowrap; }
+    .btn:hover:not(:disabled) { background: var(--text); color: var(--bg); }
+    .btn:disabled { background: transparent; color: var(--muted); border-color: var(--border-dim); cursor: not-allowed; }
+
+    .hw-hud-btn {
+      background: rgba(0, 230, 118, 0.1);
+      border: 1px solid var(--accent-green);
+      color: var(--text);
+      padding: 0 0.65rem;
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 0.7rem;
+      font-weight: 600;
+      height: 36px;
+      border-radius: 4px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 0.45rem;
+      flex-shrink: 0;
+      white-space: nowrap;
+    }
+    .hw-tier-pill {
+      background: var(--accent-green);
+      color: var(--bg);
+      padding: 2px 5px;
+      font-size: 0.65rem;
+      font-weight: 600;
+      border-radius: 2px;
+    }
+
+    #acceptCallBtn { background: var(--text); color: var(--bg); font-size: 1rem; display: none; }
+    #cutCallBtn { background: rgba(255,45,58,0.2); color: var(--accent-red); font-size: 1rem; display: none; border-color: var(--accent-red); }
+    #cutCallBtn:hover { background: var(--accent-red); color: white; }
+
+    .fullscreen-video-container { position: fixed; top: 0; left: 0; z-index: 1; width: 100vw; height: 100vh; height: 100dvh; background: #000; contain: strict; }
+    .video-grid { display: flex; flex-wrap: wrap; width: 100%; height: 100%; gap: 0; align-content: flex-start; }
+    .video-wrapper { position: relative; border: 1px solid rgba(0,4,50,0.5); background: #000; overflow: hidden; display: flex; justify-content: center; align-items: center; contain: layout paint; }
+    .video-wrapper.active { border-color: var(--text); }
+        .video-wrapper.screen-share video { object-fit: contain; }
+    .video-wrapper video { width: 100%; height: 100%; object-fit: cover; transform: translateZ(0); will-change: transform; }
+    .video-wrapper video.mirrored { transform: scaleX(-1) translateZ(0); }
+    .video-label { position: absolute; bottom: 8px; left: 8px; background: rgba(0, 4, 50, 0.88); border: 1px solid var(--text); font-family: 'IBM Plex Mono', monospace; font-size: 0.68rem; padding: 4px 8px; color: var(--text); z-index: 2; text-transform: uppercase; display: flex; align-items: center; gap: 6px; }
+    .video-label .res-tag { color: var(--accent-green); font-weight: 600; }
+
+    .hw-modal-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 60;
+      background: rgba(0, 2, 25, 0.88);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+    }
+    .hw-modal-backdrop.open { display: flex; }
+    .hw-modal {
+      width: 100%;
+      max-width: 520px;
+      background: #000432;
+      border: 1px solid var(--text);
+      padding: 1.1rem;
+      font-family: 'IBM Plex Mono', monospace;
+      color: var(--text);
+    }
+    .hw-modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 0.65rem;
+      margin-bottom: 0.85rem;
+    }
+    .hw-modal-title { font-size: 0.82rem; font-weight: 600; color: var(--accent-green); }
+    .hw-close-btn { background: transparent; border: 1px solid var(--border); color: var(--text); font-family: 'IBM Plex Mono', monospace; font-size: 0.7rem; padding: 2px 8px; cursor: pointer; }
+    .hw-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.55rem;
+      margin-bottom: 0.9rem;
+    }
+    .hw-cell {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--border-dim);
+      padding: 0.5rem 0.65rem;
+    }
+    .hw-cell.full { grid-column: 1 / -1; }
+    .hw-cell-label { font-size: 0.62rem; color: var(--muted); text-transform: uppercase; margin-bottom: 3px; }
+    .hw-cell-val { font-size: 0.75rem; font-weight: 600; color: var(--text); word-break: break-word; }
+    .hw-cell-val.highlight { color: var(--accent-green); }
+    .hw-mode-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+      padding-top: 0.65rem;
+      border-top: 1px solid var(--border-dim);
+    }
+    .hw-mode-btn {
+      flex: 1 1 auto;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 0.68rem;
+      font-weight: 600;
+      padding: 0.45rem 0.5rem;
+      cursor: pointer;
+      text-transform: uppercase;
+    }
+    .hw-mode-btn.active {
+      background: var(--accent-green);
+      color: var(--bg);
+      border-color: var(--accent-green);
+    }
+
+    .members-list { list-style: none; padding: 0; margin: 0; display: flex; align-items: center; gap: 0.75rem; }
+    .members-list li { display: flex; align-items: center; gap: 8px; font-family: 'IBM Plex Mono', monospace; font-size: 0.75rem; background: rgba(255,255,255,0.05); border: 1px solid var(--border-dim); padding: 0 0.75rem; height: 36px; border-radius: 4px; white-space: nowrap; }
+    .member-name { display: flex; align-items: center; gap: 8px; text-transform: uppercase; }
+
+    .buzz-member-btn { background: transparent; border: 1px solid var(--text); color: var(--text); padding: 0 0.5rem; font-family: 'IBM Plex Mono', monospace; font-size: 0.7rem; font-weight: 600; cursor: pointer; margin-left: 5px; height: 24px; border-radius: 2px; }
+    .buzz-member-btn:hover:not(:disabled) { background: var(--text); color: var(--bg); }
+    .buzz-member-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+        .buzz-member-btn { display: inline-flex; align-items: center; justify-content: center; }
+        .buzz-member-btn svg { display: block; }
+            .app { display: none !important; }
+                body > #screenShareBtn { position: fixed; left: 16px; bottom: 16px; z-index: 70; height: 40px; padding: 0 1rem; }
+                .pane-num { display: none !important; }
+                .pane-num .buzz-member-btn { display: none !important; }
+            .pane-num { position: absolute; right: 8px; bottom: 8px; z-index: 3; display: flex; align-items: center; gap: 6px; background: var(--accent-green); color: var(--bg); font-family: 'IBM Plex Mono', monospace; font-size: 0.95rem; font-weight: 600; padding: 3px 10px; border-radius: 4px; pointer-events: none; }
+            .pane-num .buzz-member-btn { margin-left: 0; height: 22px; border-color: var(--bg); color: var(--bg); pointer-events: auto; }
+            .pane-num .buzz-member-btn:hover:not(:disabled) { background: var(--bg); color: var(--text); }
+            body > #acceptCallBtn { position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%); z-index: 70; height: 48px; padding: 0 2.2rem; font-size: 1.1rem; }
+            .members-list li { background: var(--accent-green); border-color: var(--accent-green); color: var(--bg); font-weight: 600; }
+            .members-list .status-dot { display: none; }
+            .members-list li .buzz-member-btn { border-color: var(--bg); color: var(--bg); }
+            .members-list li .buzz-member-btn:hover:not(:disabled) { background: var(--bg); color: var(--text); }
+
+    body.incoming-buzz { animation: buzzFlash 1s ease-in-out infinite; }
+    @keyframes buzzFlash { 0%, 100% { background: var(--bg); } 50% { background: var(--text); color: var(--bg); } }
+
+    .buzz-toast { position: fixed; top: 1.5rem; left: 50%; transform: translateX(-50%); z-index: 50; background: var(--text); color: var(--bg); padding: 1rem 1.5rem; font-family: 'IBM Plex Mono', monospace; font-size: 0.9rem; font-weight: 600; display: none; align-items: center; text-transform: uppercase; }
+    .buzz-toast.show { display: flex; }
+
+    .waveform { display: none; align-items: center; justify-content: center; gap: 4px; height: 36px; margin: 0 0.5rem; }
+    .waveform.active { display: flex; }
+    .waveform span { display: block; width: 4px; background: var(--accent-green); animation: wave 1.2s ease-in-out infinite; }
+    .waveform span:nth-child(1) { height: 10px; animation-delay: 0s; }
+    .waveform span:nth-child(2) { height: 22px; animation-delay: 0.1s; }
+    .waveform span:nth-child(3) { height: 32px; animation-delay: 0.2s; }
+    .waveform span:nth-child(4) { height: 22px; animation-delay: 0.3s; }
+    .waveform span:nth-child(5) { height: 12px; animation-delay: 0.4s; }
+
+    @keyframes wave {
+      0%, 100% { transform: scaleY(0.4); opacity: 0.5; }
+      50% { transform: scaleY(1); opacity: 1; }
+    }
+  </style>
+</head>
+<body>
+
+  <canvas id="bgCanvas"></canvas>
+
+  <!-- Full Screen Video Grid Layer -->
+  <div id="videoCard" class="fullscreen-video-container" style="display: none;">
+    <div class="video-grid" id="videoGrid">
+      <div class="video-wrapper" id="localVideoWrapper">
+        <video id="localVideo" class="mirrored" autoplay playsinline muted></video>
+                <div class="pane-num" id="localPaneNum"><span class="pane-num-text"></span></div>
+        <div class="video-label" id="localVideoLabel">
+          <span>SELF</span>
+          <span class="res-tag" id="localResTag">INIT...</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Hardware Diagnostics & 4G/5G Mobile Telemetry Modal -->
+  <div class="hw-modal-backdrop" id="hwModalBackdrop">
+    <div class="hw-modal">
+      <div class="hw-modal-header">
+        <span class="hw-modal-title">RTDB WEBSOCKET + 4G/5G HW ASIC ENGINE</span>
+        <button class="hw-close-btn" id="hwModalCloseBtn">CLOSE [X]</button>
+      </div>
+      <div class="hw-grid">
+        <div class="hw-cell full">
+          <div class="hw-cell-label">Hardware Capacity & Active Offload Verdict</div>
+          <div class="hw-cell-val highlight" id="hwProcessorVerdict">ANALYZING...</div>
+        </div>
+        <div class="hw-cell">
+          <div class="hw-cell-label">CPU Cores & Single-Thread Speed</div>
+          <div class="hw-cell-val" id="hwCpuVal">--</div>
+        </div>
+        <div class="hw-cell">
+          <div class="hw-cell-label">System RAM & Display Hz</div>
+          <div class="hw-cell-val" id="hwRamVal">--</div>
+        </div>
+        <div class="hw-cell full">
+          <div class="hw-cell-label">Dedicated Video Silicon / GPU</div>
+          <div class="hw-cell-val" id="hwGpuVal">--</div>
+        </div>
+        <div class="hw-cell">
+          <div class="hw-cell-label">Encoder & Burst Buffer</div>
+          <div class="hw-cell-val highlight" id="hwEncoderVal">HW H.264 ASIC (25ms Buffer)</div>
+        </div>
+        <div class="hw-cell">
+          <div class="hw-cell-label">4G/5G Ping, Jitter & Loss</div>
+          <div class="hw-cell-val highlight" id="hwNetVal">--</div>
+        </div>
+        <div class="hw-cell full">
+          <div class="hw-cell-label">Active Outbound Camera Pipeline</div>
+          <div class="hw-cell-val highlight" id="hwActiveStreamVal">--</div>
+        </div>
+      </div>
+      <div class="hw-cell-label" style="margin-bottom: 6px;">4G/5G Mobile Offload Profile (720p60 is fastest on 4G/5G uplink)</div>
+      <div class="hw-mode-bar" id="hwModeBar">
+        <button class="hw-mode-btn active" data-mode="auto">AUTO (4G/5G SMART)</button>
+        <button class="hw-mode-btn" data-mode="ultra">1080P 60FPS</button>
+        <button class="hw-mode-btn" data-mode="high">720P 60FPS</button>
+        <button class="hw-mode-btn" data-mode="medium">720P 30FPS</button>
+        <button class="hw-mode-btn" data-mode="low">480P 30FPS</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="app">
+    <div id="channelScreen" style="display: flex; flex-direction: row; gap: 1rem; align-items: center; height: 100%; width: max-content; padding: 0 1.25rem; margin: 0 auto;">
+      <div class="header">
+        <input type="text" id="myIdInput" class="big-id-input" placeholder="INIT...">
+      </div>
+
+      <div class="status-bar" id="statusBar" title="Connection Status">
+        <div class="status-dot connected"></div>
+        <span id="statusText" style="display: none;">CONNECTING...</span>
+      </div>
+
+      <button id="hwHudBtn" class="hw-hud-btn" title="Hardware Capacity & 4G/5G Diagnostics">
+        <span id="hwHudSummary">HW: DETECTING...</span>
+        <span class="hw-tier-pill" id="hwHudTierPill">AUTO</span>
+      </button>
+
+      <div class="card">
+        <div class="waveform" id="waveform">
+          <span></span><span></span><span></span><span></span><span></span>
+        </div>
+        <button id="acceptCallBtn" class="btn">ACCEPT</button>
+        <button id="cutCallBtn" class="btn">MUTE</button>
+                <button id="screenShareBtn" class="btn" title="SHARE SCREEN">SHARE SCREEN</button>
+        <button id="buzzAllBtn" class="btn" title="GLOBAL BUZZ" style="padding: 0 1rem; display: none;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 17H2c0-1.5 1.5-2.5 1.5-2.5V10a8.5 8.5 0 0 1 17 0v4.5S22 15.5 22 17z"></path>
+            <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+          </svg>
+        </button>
+      </div>
+
+      <div class="card">
+        <ul class="members-list" id="membersList"></ul>
+      </div>
+    </div>
+  </div>
+
+  <div id="buzzToast" class="buzz-toast">
+    <span id="buzzToastText">BUZZ</span>
+  </div>
+
+  <!-- Background Canvas Logic: Pauses when video is live to free 100% of GPU -->
+  <script>
+    window.__pauseBgCanvas = false;
+    (function () {
+      const canvas = document.getElementById('bgCanvas');
+      const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+      if (!gl) { canvas.style.display = 'none'; return; }
+      const vsSource = `attribute vec2 aPosition; attribute float aSize; attribute float aAlpha; varying float vAlpha; uniform vec2 uResolution; void main() { vec2 clipSpace = (aPosition / uResolution) * 2.0 - 1.0; gl_Position = vec4(clipSpace * vec2(1.0, -1.0), 0.0, 1.0); gl_PointSize = aSize; vAlpha = aAlpha; }`;
+      const fsSource = `precision mediump float; varying float vAlpha; uniform vec3 uColor; void main() { vec2 coord = gl_PointCoord - vec2(0.5); float dist = length(coord); float circle = smoothstep(0.5, 0.0, dist); gl_FragColor = vec4(uColor, vAlpha * circle); }`;
+      const lineVsSource = `attribute vec2 aPosition; attribute float aAlpha; varying float vAlpha; uniform vec2 uResolution; void main() { vec2 clipSpace = (aPosition / uResolution) * 2.0 - 1.0; gl_Position = vec4(clipSpace * vec2(1.0, -1.0), 0.0, 1.0); vAlpha = aAlpha; }`;
+      const lineFsSource = `precision mediump float; varying float vAlpha; uniform vec3 uColor; void main() { gl_FragColor = vec4(uColor, vAlpha); }`;
+      function compileShader(gl, type, source) { const shader = gl.createShader(type); gl.shaderSource(shader, source); gl.compileShader(shader); return gl.getShaderParameter(shader, gl.COMPILE_STATUS) ? shader : null; }
+      function createProgram(gl, vsSource, fsSource) { const vs = compileShader(gl, gl.VERTEX_SHADER, vsSource); const fs = compileShader(gl, gl.FRAGMENT_SHADER, fsSource); const program = gl.createProgram(); gl.attachShader(program, vs); gl.attachShader(program, fs); gl.linkProgram(program); return program; }
+      const pointProgram = createProgram(gl, vsSource, fsSource), lineProgram = createProgram(gl, lineVsSource, lineFsSource);
+      let width, height; function resize() { width = canvas.clientWidth = window.innerWidth; height = canvas.clientHeight = window.innerHeight; canvas.width = width * (window.devicePixelRatio || 1); canvas.height = height * (window.devicePixelRatio || 1); gl.viewport(0, 0, canvas.width, canvas.height); }
+      window.addEventListener('resize', resize); resize();
+      const NODE_COUNT = Math.min(50, Math.floor((window.innerWidth * window.innerHeight) / 16000)), LINK_DIST = 130, nodes = [];
+      for (let i = 0; i < NODE_COUNT; i++) nodes.push({ x: Math.random() * width, y: Math.random() * height, vx: (Math.random() - 0.5) * 0.25, vy: (Math.random() - 0.5) * 0.25, size: 2 + Math.random() * 2, alpha: 0.3 + Math.random() * 0.3 });
+
+      const colorAccent = [1.0, 1.0, 1.0], pointPosBuffer = gl.createBuffer(), pointSizeBuffer = gl.createBuffer(), pointAlphaBuffer = gl.createBuffer(), linePosBuffer = gl.createBuffer(), lineAlphaBuffer = gl.createBuffer();
+      const pointAttribs = { aPosition: gl.getAttribLocation(pointProgram, 'aPosition'), aSize: gl.getAttribLocation(pointProgram, 'aSize'), aAlpha: gl.getAttribLocation(pointProgram, 'aAlpha') }, pointUniforms = { uResolution: gl.getUniformLocation(pointProgram, 'uResolution'), uColor: gl.getUniformLocation(pointProgram, 'uColor') }, lineAttribs = { aPosition: gl.getAttribLocation(lineProgram, 'aPosition'), aAlpha: gl.getAttribLocation(lineProgram, 'aAlpha') }, lineUniforms = { uResolution: gl.getUniformLocation(lineProgram, 'uResolution'), uColor: gl.getUniformLocation(lineProgram, 'uColor') };
+      function update() { for (const n of nodes) { n.x += n.vx; n.y += n.vy; if (n.x < 0 || n.x > width) n.vx *= -1; if (n.y < 0 || n.y > height) n.vy *= -1; n.x = Math.max(0, Math.min(width, n.x)); n.y = Math.max(0, Math.min(height, n.y)); } }
+      function render() { gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT); gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); const linePositions = [], lineAlphas = []; for (let i = 0; i < nodes.length; i++) { for (let j = i + 1; j < nodes.length; j++) { const dx = nodes[i].x - nodes[j].x, dy = nodes[i].y - nodes[j].y, dist = Math.sqrt(dx * dx + dy * dy); if (dist < LINK_DIST) { const a = (1 - dist / LINK_DIST) * 0.25; linePositions.push(nodes[i].x, nodes[i].y, nodes[j].x, nodes[j].y); lineAlphas.push(a, a); } } }
+        if (linePositions.length > 0) { gl.useProgram(lineProgram); gl.uniform2f(lineUniforms.uResolution, width, height); gl.uniform3fv(lineUniforms.uColor, colorAccent); gl.bindBuffer(gl.ARRAY_BUFFER, linePosBuffer); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(linePositions), gl.DYNAMIC_DRAW); gl.enableVertexAttribArray(lineAttribs.aPosition); gl.vertexAttribPointer(lineAttribs.aPosition, 2, gl.FLOAT, false, 0, 0); gl.bindBuffer(gl.ARRAY_BUFFER, lineAlphaBuffer); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(lineAlphas), gl.DYNAMIC_DRAW); gl.enableVertexAttribArray(lineAttribs.aAlpha); gl.vertexAttribPointer(lineAttribs.aAlpha, 1, gl.FLOAT, false, 0, 0); gl.drawArrays(gl.LINES, 0, linePositions.length / 2); }
+        const pointPositions = [], pointSizes = [], pointAlphas = []; for (const n of nodes) { pointPositions.push(n.x, n.y); pointSizes.push(n.size * (window.devicePixelRatio || 1)); pointAlphas.push(n.alpha); }
+        gl.useProgram(pointProgram); gl.uniform2f(pointUniforms.uResolution, width, height); gl.uniform3fv(pointUniforms.uColor, colorAccent); gl.bindBuffer(gl.ARRAY_BUFFER, pointPosBuffer); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(pointPositions), gl.DYNAMIC_DRAW); gl.enableVertexAttribArray(pointAttribs.aPosition); gl.vertexAttribPointer(pointAttribs.aPosition, 2, gl.FLOAT, false, 0, 0); gl.bindBuffer(gl.ARRAY_BUFFER, pointSizeBuffer); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(pointSizes), gl.DYNAMIC_DRAW); gl.enableVertexAttribArray(pointAttribs.aAlpha); gl.vertexAttribPointer(pointAttribs.aAlpha, 1, gl.FLOAT, false, 0, 0); gl.drawArrays(gl.POINTS, 0, nodes.length); }
+      function loop() {
+        if (!window.__pauseBgCanvas) {
+          update();
+          render();
+        }
+        requestAnimationFrame(loop);
+      }
+      loop();
+    })();
+  </script>
+
+  <!-- Core App Logic (Switched to Firebase Realtime Database WebSocket Engine) -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
+    import {
+      getDatabase,
+      ref,
+      set,
+      update,
+      push,
+      onValue,
+      onChildAdded,
+      remove,
+      get,
+      onDisconnect
+    } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-database.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyCX-bZLDHy-6wxuc5b8YInV_Mr7uYOTmgk",
+      authDomain: "trinity-os-8edd0.firebaseapp.com",
+      databaseURL: "https://trinity-os-8edd0-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: "trinity-os-8edd0",
+      storageBucket: "trinity-os-8edd0.firebasestorage.app",
+      messagingSenderId: "692349337854",
+      appId: "1:692349337854:web:ef24ead6e7362a5772a5af"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const rtdb = getDatabase(app);
+
+    const GLITCH_WORKER_URL = "https://ptt-backend-aoul.onrender.com";
+    const VAPID_PUBLIC_KEY = "BCPTdBcEXkGuQTtLehEmXp7KkN5jqhAyp4VbL7GZn1ixXAyt_AOXq6qAzzSJO8BM47YnfdGmLc990m0P3ER_2RA";
+
+    function urlBase64ToUint8Array(base64String) {
+      const padding = '='.repeat((4 - base64String.length % 4) % 4);
+      const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+      const rawData = atob(base64);
+      const outputArray = new Uint8Array(rawData.length);
+      for (let i = 0; i < rawData.length; i++) outputArray[i] = rawData.charCodeAt(i);
+      return outputArray;
+    }
+
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('./sw.js').catch(() => {});
+    }
+
+    // Multi-STUN + Free OpenRelay TURN Fallback for 4G/5G Carrier CGNAT
+    const servers = {
+      iceServers: [
+        { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
+        { urls: 'stun:stun.cloudflare.com:3478' },
+        {
+          urls: [
+            'turn:openrelay.metered.ca:80',
+            'turn:openrelay.metered.ca:443',
+            'turn:openrelay.metered.ca:443?transport=tcp'
+          ],
+          username: 'openrelayproject',
+          credential: 'openrelayproject'
+        }
+      ],
+      bundlePolicy: 'max-bundle',
+      rtcpMuxPolicy: 'require',
+      iceCandidatePoolSize: 4
+    };
+
+    const BASE_ICE = servers.iceServers.slice();
+    function validIce(list) {
+      return (Array.isArray(list) ? list : []).map((e) => {
+        const urls = [].concat((e && e.urls) || []).filter((u) => typeof u === 'string' && /^(stun|turns?):/.test(u) && !/:53(\?|$)/.test(u));
+        if (!urls.length) return null;
+        const o = { urls };
+        const isTurn = urls.some((u) => /^turns?:/.test(u));
+        if (isTurn) {
+          if (!e.username || !e.credential) return null;
+          o.username = e.username; o.credential = e.credential;
+        }
+        return o;
+      }).filter(Boolean);
+    }
+    async function refreshTurn() {
+      try {
+        const c = new AbortController();
+        const t = setTimeout(() => c.abort(), 2500);
+        const r = await fetch(GLITCH_WORKER_URL + '/turn-credentials', { signal: c.signal });
+        clearTimeout(t);
+        if (!r.ok || r.status === 204) return;
+        const list = validIce((await r.json()).iceServers);
+        if (list.some((x) => x.username)) servers.iceServers = list;
+      } catch (e) {}
+    }
+    const turnReady = refreshTurn();
+    setInterval(refreshTurn, 6 * 3600 * 1000);
+    const wakeServer = () => fetch(GLITCH_WORKER_URL + '/', { mode: 'no-cors' }).catch(() => {});
+    wakeServer();
+    setInterval(wakeServer, 8 * 60 * 1000);
+
+    const QUALITY_PROFILES = window.__QUALITY_PROFILES;
+    let qualityMode = 'auto';
+    let currentTier = window.__earlyTier || 'high';
+    let currentProfile = QUALITY_PROFILES[currentTier] || QUALITY_PROFILES.high;
+    const hwInfo = window.__HW_INFO || {};
+
+    function measureScreenRefreshRate() {
+      return new Promise((resolve) => {
+        let frames = 0;
+        const start = performance.now();
+        function tick(now) {
+          frames++;
+          if (now - start < 400) {
+            requestAnimationFrame(tick);
+          } else {
+            resolve(Math.round((frames * 1000) / (now - start)));
+          }
+        }
+        requestAnimationFrame(tick);
+      });
+    }
+
+    function preferHardwareH264Codec(pc) {
+      try {
+        if (!RTCRtpSender.getCapabilities) return;
+        const caps = RTCRtpSender.getCapabilities('video');
+        if (!caps || !caps.codecs) return;
+
+        const h264Codecs = caps.codecs.filter(c => c.mimeType.toLowerCase() === 'video/h264');
+        const otherCodecs = caps.codecs.filter(c => c.mimeType.toLowerCase() !== 'video/h264');
+
+        if (h264Codecs.length > 0) {
+          pc.getTransceivers().forEach(transceiver => {
+            if (transceiver.sender && transceiver.sender.track && transceiver.sender.track.kind === 'video') {
+              if (typeof transceiver.setCodecPreferences === 'function') {
+                transceiver.setCodecPreferences([...h264Codecs, ...otherCodecs]);
+              }
+            }
+          });
+        }
+      } catch (e) {}
+    }
+
+    function boostSdpForMobileLowLatency(sdp, profile) {
+      if (!sdp) return sdp;
+      const maxKbps = Math.round(profile.maxBitrate / 1000);
+      const startKbps = Math.round((profile.startBitrate || 700000) / 1000);
+      const minKbps = Math.round((profile.minBitrate || 250000) / 1000);
+      const vPts = new Set();
+      sdp.replace(/a=rtpmap:(\d+) (?:H264|VP8|VP9|AV1|H265)\//gi, (m, pt) => { vPts.add(pt); return m; });
+      const om = sdp.match(/a=rtpmap:(\d+) opus\/48000/i);
+      const opusPt = om ? om[1] : null;
+      const addPtime = !/a=ptime:/.test(sdp);
+
+      const out = sdp.replace(/a=fmtp:(\d+) ([^\r\n]*)/g, (line, pt, params) => {
+        if (vPts.has(pt)) {
+          return `${line};x-google-start-bitrate=${startKbps};x-google-min-bitrate=${minKbps};x-google-max-bitrate=${maxKbps}`;
+        }
+        if (pt === opusPt) {
+          const kv = {};
+          params.split(';').forEach((x) => { const [k, v] = x.split('='); if (k) kv[k.trim()] = v; });
+          Object.assign(kv, { minptime: '10', useinbandfec: '1', usedtx: '0', stereo: '0', 'sprop-stereo': '0', cbr: '0', maxaveragebitrate: String(profile.audioBitrate || 48000) });
+          return 'a=fmtp:' + pt + ' ' + Object.entries(kv).map(([k, v]) => v === undefined ? k : k + '=' + v).join(';') + (addPtime ? '\r\na=ptime:10' : '');
+        }
+        return line;
+      });
+      return out;
+    }
+
+    function applyCellularMicroBufferToReceiver(receiver, kind) {
+      if (!receiver) return;
+      try {
+        const isV = kind === 'video';
+        const j = (isV ? hwInfo.videoJitterMs : hwInfo.audioJitterMs) || 0;
+        const ms = isV ? Math.max(15, Math.min(120, 3 * j + 10)) : Math.max(30, Math.min(100, 3 * j + 10));
+        if (!isV) hwInfo.playoutBufferMs = ms;
+        if ('playoutDelayHint' in receiver) receiver.playoutDelayHint = ms / 1000;
+        if ('jitterBufferTarget' in receiver) receiver.jitterBufferTarget = ms;
+      } catch (e) {}
+    }
+
+    function applySenderParameters(pc) {
+      preferHardwareH264Codec(pc);
+      pc.getSenders().forEach((sender) => {
+        if (!sender.track) return;
+        if (sender.track.kind === 'video') {
+          try {
+            const params = sender.getParameters() || {};
+            if (!params.encodings || !params.encodings.length) params.encodings = [{}];
+            params.encodings[0].maxBitrate = currentProfile.maxBitrate;
+            params.encodings[0].maxFramerate = currentProfile.frameRate;
+            params.encodings[0].scaleResolutionDownBy = 1.0;
+            params.encodings[0].priority = 'medium';
+            params.encodings[0].networkPriority = 'medium';
+            params.degradationPreference = currentProfile.degradation || 'maintain-framerate';
+            sender.setParameters(params).catch(() => {});
+          } catch (e) {}
+        } else if (sender.track.kind === 'audio') {
+          try {
+            const params = sender.getParameters() || {};
+            if (!params.encodings || !params.encodings.length) params.encodings = [{}];
+            params.encodings[0].maxBitrate = currentProfile.audioBitrate || 64000;
+            params.encodings[0].priority = 'high';
+            params.encodings[0].networkPriority = 'high';
+            sender.setParameters(params).catch(() => {});
+          } catch (e) {}
+        }
+      });
+    }
+
+    async function configureLocalTrackForZeroLag() {
+      if (!localStream) return;
+      const vTrack = localStream.getVideoTracks()[0];
+      if (!vTrack) return;
+      try {
+        if ('contentHint' in vTrack) {
+          vTrack.contentHint = 'motion';
+        }
+      } catch (e) {}
+      refreshHardwareTelemetryUI();
+    }
+
+    async function applyTierProfile(newTier, modeLabel = qualityMode) {
+      qualityMode = modeLabel;
+      currentTier = newTier;
+      currentProfile = QUALITY_PROFILES[currentTier] || QUALITY_PROFILES.high;
+
+      const vTrack = localStream && localStream.getVideoTracks()[0];
+      if (vTrack) {
+        await vTrack.applyConstraints({
+          width: { ideal: currentProfile.width },
+          height: { ideal: currentProfile.height },
+          frameRate: { ideal: currentProfile.frameRate }
+        }).catch(() => {});
+      }
+
+      Object.values(peers).forEach((pc) => applySenderParameters(pc));
+      setTimeout(refreshHardwareTelemetryUI, 300);
+    }
+
+    function refreshHardwareTelemetryUI() {
+      const vTrack = localStream && localStream.getVideoTracks()[0];
+      const settings = vTrack && typeof vTrack.getSettings === 'function' ? vTrack.getSettings() : {};
+      const actualW = localVideo.videoWidth || settings.width || currentProfile.width;
+      const actualH = localVideo.videoHeight || settings.height || currentProfile.height;
+      const actualFps = settings.frameRate ? Math.round(settings.frameRate) : currentProfile.frameRate;
+
+      hwInfo.activeRes = `${actualW}×${actualH}`;
+      hwInfo.activeFps = actualFps;
+      document.querySelectorAll('[id^="remote-res-"]').forEach((el) => {
+        const w = el.closest('.video-wrapper');
+        const v = w && w.querySelector('video');
+        const r = v && v.videoWidth ? v.videoWidth + '×' + v.videoHeight + ' • ' : '';
+        el.textContent = r + (hwInfo.pathType || '…') + ' • ' + hwInfo.roundTripMs + 'MS • ' + (hwInfo.rxFps || 0) + 'FPS';
+      });
+
+      const localResTag = document.getElementById('localResTag');
+      if (localResTag) {
+        localResTag.textContent = `${currentProfile.label} • ${actualW}×${actualH}@${actualFps}FPS • ${hwInfo.roundTripMs}MS`;
+      }
+
+      const hwHudSummary = document.getElementById('hwHudSummary');
+      const hwHudTierPill = document.getElementById('hwHudTierPill');
+      if (hwHudSummary && hwHudTierPill) {
+        const shortClass = hwInfo.score >= 75 ? 'FAST CPU' : (hwInfo.score >= 56 ? 'HIGH CPU' : (hwInfo.score >= 40 ? 'MID CPU' : 'LITE CPU'));
+        hwHudSummary.textContent = `${shortClass} • ${hwInfo.roundTripMs}ms`;
+        hwHudTierPill.textContent = `${qualityMode === 'auto' ? 'AUTO' : 'LOCK'}: ${currentProfile.label}`;
+      }
+
+      const verdictEl = document.getElementById('hwProcessorVerdict');
+      if (verdictEl) {
+        verdictEl.textContent = `${hwInfo.processorClass} (SCORE ${hwInfo.score}/100)`;
+      }
+      const cpuEl = document.getElementById('hwCpuVal');
+      if (cpuEl) cpuEl.textContent = `${hwInfo.cores} Cores • ${(hwInfo.cpuOpsPerMs / 1000).toFixed(1)}K ops/ms`;
+
+      const ramEl = document.getElementById('hwRamVal');
+      if (ramEl) ramEl.textContent = `${hwInfo.memory} • ${hwInfo.refreshRateHz}Hz`;
+
+      const gpuEl = document.getElementById('hwGpuVal');
+      if (gpuEl) gpuEl.textContent = `${hwInfo.gpuClass} (${hwInfo.gpuRenderer})`;
+
+      const encEl = document.getElementById('hwEncoderVal');
+      if (encEl) encEl.textContent = `${hwInfo.encoderType} • ${hwInfo.playoutBufferMs}ms Burst Buffer`;
+
+      const est = Math.round((hwInfo.roundTripMs || 0) / 2 + (hwInfo.bufMs || 0) + (hwInfo.decMs || 0) + 25);
+      const netEl = document.getElementById('hwNetVal');
+      if (netEl) netEl.textContent = `${hwInfo.pathType || '…'} • ${hwInfo.roundTripMs}ms RTT • ${hwInfo.jitterMs}ms Jit • ${hwInfo.packetLossPct}% Loss • ${hwInfo.rxFps || 0}fps • ~${est}ms est`;
+
+      const activeStreamEl = document.getElementById('hwActiveStreamVal');
+      if (activeStreamEl) {
+        const mbps = (currentProfile.maxBitrate / 1000000).toFixed(1);
+        activeStreamEl.textContent = `${actualW}×${actualH} @ ${actualFps} FPS (4G/5G Cap ${mbps} Mbps)`;
+      }
+
+      document.querySelectorAll('#hwModeBar .hw-mode-btn').forEach((btn) => {
+        const m = btn.getAttribute('data-mode');
+        btn.classList.toggle('active', m === qualityMode);
+      });
+    }
+
+    let congestionStrikes = 0;
+    function startAdaptiveMonitor() {
+      setInterval(async () => {
+        let cpuOrBandwidthLimited = false;
+                var connectedPeers = 0;
+
+        for (const uid in peers) {
+          const pc = peers[uid];
+          if (!pc || pc.connectionState !== 'connected') continue;
+                    connectedPeers++;
+          try {
+            const stats = await pc.getStats();
+            stats.forEach((report) => {
+              if (report.type === 'outbound-rtp' && report.kind === 'video') {
+                if (report.encoderImplementation) {
+                  hwInfo.encoderType = report.powerEfficientEncoder === true
+                    ? `HW ASIC (${report.encoderImplementation})`
+                    : `SW (${report.encoderImplementation})`;
+                }
+                if (report.qualityLimitationReason === 'cpu' || report.qualityLimitationReason === 'bandwidth') {
+                  cpuOrBandwidthLimited = true;
+                }
+              }
+              if (report.type === 'remote-inbound-rtp' && report.kind === 'video' && typeof report.fractionLost === 'number' && report.fractionLost > 0.08) {
+                              cpuOrBandwidthLimited = true;
+                            }
+                            if (report.type === 'inbound-rtp' && (report.kind === 'video' || report.kind === 'audio')) {
+                if (typeof report.jitter === 'number') {
+                  hwInfo.jitterMs = Math.round(report.jitter * 1000);
+                  if (report.kind === 'video') hwInfo.videoJitterMs = hwInfo.jitterMs; else hwInfo.audioJitterMs = hwInfo.jitterMs;
+                  if (report.kind === 'video') {
+                    hwInfo.rxFps = Math.round(report.framesPerSecond || 0);
+                    const pv = hwInfo._pv || {};
+                    const dc = (report.jitterBufferEmittedCount || 0) - (pv.c || 0);
+                    const dd = (report.jitterBufferDelay || 0) - (pv.d || 0);
+                    const df = (report.framesDecoded || 0) - (pv.f || 0);
+                    const dt = (report.totalDecodeTime || 0) - (pv.t || 0);
+                    if (dc > 0) hwInfo.bufMs = Math.round(1000 * dd / dc);
+                    if (df > 0) hwInfo.decMs = Math.round(1000 * dt / df);
+                    hwInfo._pv = { c: report.jitterBufferEmittedCount || 0, d: report.jitterBufferDelay || 0, f: report.framesDecoded || 0, t: report.totalDecodeTime || 0 };
+                  }
+                }
+                if (report.packetsReceived > 0 && typeof report.packetsLost === 'number') {
+                  const total = report.packetsReceived + Math.max(0, report.packetsLost);
+                  hwInfo.packetLossPct = Math.round((Math.max(0, report.packetsLost) / total) * 100);
+                }
+              }
+            });
+            let selId = null;
+            stats.forEach((r) => { if (r.type === 'transport' && r.selectedCandidatePairId) selId = r.selectedCandidatePairId; });
+            let pair = selId ? stats.get(selId) : null;
+            if (!pair) stats.forEach((r) => { if (r.type === 'candidate-pair' && (r.selected || (r.nominated && r.state === 'succeeded'))) pair = r; });
+            if (pair) {
+              if (typeof pair.currentRoundTripTime === 'number') hwInfo.roundTripMs = Math.round(pair.currentRoundTripTime * 1000);
+              const lc = stats.get(pair.localCandidateId), rc = stats.get(pair.remoteCandidateId);
+              const isRelay = (lc && lc.candidateType === 'relay') || (rc && rc.candidateType === 'relay');
+              hwInfo.pathType = isRelay ? 'RELAY' : 'DIRECT';
+              if (hwInfo.roundTripMs > 220) cpuOrBandwidthLimited = true;
+            }
+
+            pc.getReceivers().forEach(r => {
+              if (r.track) applyCellularMicroBufferToReceiver(r, r.track.kind);
+            });
+          } catch (e) {}
+        }
+
+        refreshHardwareTelemetryUI();
+        if (qualityMode !== 'auto') return;
+
+        if (cpuOrBandwidthLimited) {
+          congestionStrikes++;
+                    cleanStrikes = 0;
+          if (congestionStrikes >= 2 && currentTier !== 'low') {
+            congestionStrikes = 0;
+            const order = ['ultra', 'high', 'medium', 'low'];
+            const nextIdx = Math.min(order.length - 1, order.indexOf(currentTier) + 1);
+            await applyTierProfile(order[nextIdx], 'auto');
+                        cleanStrikes = 0;
+                        cleanNeeded = Math.min(40, cleanNeeded * 2);
+          }
+        } else {
+                  congestionStrikes = 0;
+                  if (connectedPeers > 0) cleanStrikes++;
+                  if (cleanStrikes >= cleanNeeded) {
+                    cleanStrikes = 0;
+                    var upIdx = TIER_ORDER.indexOf(currentTier) - 1;
+                    if (upIdx >= 0 && upIdx >= TIER_ORDER.indexOf(hwInfo.autoRecommendedTier || 'ultra')) {
+                      await applyTierProfile(TIER_ORDER[upIdx], 'auto');
+                    }
+                  }
+                }
+      }, 3000);
+    }
+
+    const hwHudBtn = document.getElementById('hwHudBtn');
+    const hwModalBackdrop = document.getElementById('hwModalBackdrop');
+    const hwModalCloseBtn = document.getElementById('hwModalCloseBtn');
+
+    hwHudBtn.addEventListener('click', () => {
+      refreshHardwareTelemetryUI();
+      hwModalBackdrop.classList.add('open');
+    });
+    hwModalCloseBtn.addEventListener('click', () => {
+      hwModalBackdrop.classList.remove('open');
+    });
+    hwModalBackdrop.addEventListener('click', (e) => {
+      if (e.target === hwModalBackdrop) hwModalBackdrop.classList.remove('open');
+    });
+
+    document.querySelectorAll('#hwModeBar .hw-mode-btn').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const mode = btn.getAttribute('data-mode');
+        if (mode === 'auto') {
+          await applyTierProfile(hwInfo.autoRecommendedTier || 'high', 'auto');
+        } else {
+          await applyTierProfile(mode, mode);
+        }
+      });
+    });
+
+    (function () {
+      const bar = document.getElementById('hwModeBar');
+      if (!bar || !bar.parentNode) return;
+      const b = document.createElement('button');
+      const label = () => { b.textContent = window.__AUDIO_FX ? 'HEADSET MODE: OFF' : 'HEADSET MODE: ON (AEC/NS/AGC OFF)'; };
+      b.style.cssText = 'margin-top:8px;padding:8px 12px;border-radius:8px;border:1px solid #6b3fd4;background:transparent;color:#fff;font:inherit;cursor:pointer;width:100%';
+      label();
+      b.onclick = () => {
+        window.__AUDIO_FX = !window.__AUDIO_FX;
+        localStorage.setItem('headsetMode', window.__AUDIO_FX ? '0' : '1');
+        const a = localStream && localStream.getAudioTracks()[0];
+        const fx = window.__AUDIO_FX;
+        if (a) a.applyConstraints({ echoCancellation: fx, noiseSuppression: fx, autoGainControl: fx }).catch(() => {});
+        label();
+      };
+      bar.parentNode.insertBefore(b, bar.nextSibling);
+    })();
+
+    const myUid = localStorage.getItem('myUid') || Math.random().toString(36).substring(2, 10);
+    localStorage.setItem('myUid', myUid);
+    let myName = localStorage.getItem('myName') || "";
+
+    let localStream = null;
+    let keepAliveAudio = null;
+    const peers = {};
+    const candidateQueues = {};
+    const agentPresenceStates = {};
+    const reconnectAttempts = {};
+    const reconnectTimers = {};
+    const onlineUids = new Set();
+    const RECONNECT_BASE_MS = 800;
+    const RECONNECT_MAX_MS = 15000;
+    const DISCONNECT_GRACE_MS = 4000;
+
+    function cleanupPeer(uid) {
+      const wrapper = document.getElementById('video-wrapper-' + uid);
+      if (wrapper) {
+        wrapper.remove();
+        updateVideoGrid();
+      }
+      if (peers[uid]) {
+        if (peers[uid].connectionState !== 'closed') peers[uid].close();
+        delete peers[uid];
+      }
+    }
+
+    function scheduleReconnect(targetUid) {
+      if (!onlineUids.has(targetUid)) return;
+      if (reconnectTimers[targetUid]) return;
+      const attempt = (reconnectAttempts[targetUid] || 0) + 1;
+      reconnectAttempts[targetUid] = attempt;
+      const delay = Math.min(RECONNECT_BASE_MS * Math.pow(2, attempt - 1), RECONNECT_MAX_MS);
+      reconnectTimers[targetUid] = setTimeout(() => {
+        delete reconnectTimers[targetUid];
+        if (myUid > targetUid && onlineUids.has(targetUid) && (!peers[targetUid] || peers[targetUid].connectionState === 'closed')) {
+          initiateCall(targetUid);
+        }
+      }, delay);
+    }
+
+    let isCommsLive = false;
+    let hasJoined = false;
+    let hasMedia = false;
+    let ringingInterval = null;
+    let videoDevices = [];
+    let currentDeviceIndex = 0;
+    let lastTapTime = 0;
+
+    async function getVideoDevices() {
+      try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        videoDevices = devices.filter(function (d) { return d.kind === 'videoinput'; });
+      } catch (e) {
+        videoDevices = [];
+      }
+      return videoDevices;
+    }
+
+    const waveform = document.getElementById('waveform');
+    const acceptCallBtn = document.getElementById('acceptCallBtn');
+        document.body.appendChild(acceptCallBtn);
+    const cutCallBtn = document.getElementById('cutCallBtn');
+    const statusText = document.getElementById('statusText');
+    const myIdInput = document.getElementById('myIdInput');
+    const videoCard = document.getElementById('videoCard');
+    const localVideo = document.getElementById('localVideo');
+
+    localVideo.addEventListener('loadedmetadata', () => {
+      refreshHardwareTelemetryUI();
+    });
+
+    function updateVideoGrid() {
+      const wrappers = document.querySelectorAll('.video-wrapper');
+      const count = wrappers.length;
+      if (count === 0) return;
+
+      const rows = Math.ceil(Math.sqrt(count));
+      const cols = Math.ceil(count / rows);
+
+      wrappers.forEach(w => {
+        w.style.width = `${100 / cols}%`;
+        w.style.height = `${100 / rows}%`;
+      });
+    }
+    window.addEventListener('resize', updateVideoGrid);
+
+    async function switchCamera() {
+          if (screenTrack) return;
+      if (!localStream) return;
+      await getVideoDevices();
+      if (videoDevices.length < 2) return;
+
+      const oldVideoTrack = localStream.getVideoTracks()[0];
+      const oldSettings = oldVideoTrack ? oldVideoTrack.getSettings() : {};
+      let idx = videoDevices.findIndex(function (d) { return d.deviceId === oldSettings.deviceId; });
+      if (idx === -1) idx = currentDeviceIndex;
+      currentDeviceIndex = (idx + 1) % videoDevices.length;
+      const nextDeviceId = videoDevices[currentDeviceIndex].deviceId;
+
+      const buildConstraints = function (deviceId) {
+        return {
+          video: {
+            deviceId: { exact: deviceId },
+            width: { ideal: currentProfile.width },
+            height: { ideal: currentProfile.height },
+            frameRate: { ideal: currentProfile.frameRate }
+          },
+          audio: false
+        };
+      };
+
+      let newStream;
+      try {
+        newStream = await navigator.mediaDevices.getUserMedia(buildConstraints(nextDeviceId));
+      } catch (firstErr) {
+        if (oldVideoTrack) {
+          localStream.removeTrack(oldVideoTrack);
+          oldVideoTrack.stop();
+        }
+        try {
+          newStream = await navigator.mediaDevices.getUserMedia(buildConstraints(nextDeviceId));
+        } catch (secondErr) {
+          alert("CAMERA SWITCH FAILED.");
+          return;
+        }
+      }
+
+      const newVideoTrack = newStream.getVideoTracks()[0];
+      if (!newVideoTrack) return;
+
+      Object.values(peers).forEach(function (pc) {
+        const sender = pc.getSenders().find(function (s) { return s.track && s.track.kind === 'video'; });
+        if (sender) {
+          sender.replaceTrack(newVideoTrack).then(() => applySenderParameters(pc)).catch(function () {});
+        }
+      });
+
+      if (oldVideoTrack && localStream.getVideoTracks().indexOf(oldVideoTrack) !== -1) {
+        localStream.removeTrack(oldVideoTrack);
+        oldVideoTrack.stop();
+      }
+      localStream.addTrack(newVideoTrack);
+      newVideoTrack.enabled = isCommsLive;
+      localVideo.srcObject = localStream;
+
+      const newSettings = newVideoTrack.getSettings();
+      if (newSettings.facingMode) {
+        localVideo.classList.toggle('mirrored', newSettings.facingMode === 'user');
+      } else {
+        localVideo.classList.toggle('mirrored', currentDeviceIndex === 0);
+      }
+
+      await configureLocalTrackForZeroLag();
+    }
+
+    (function setupDoubleTapCameraSwitch() {
+      const wrapperEl = document.getElementById('localVideoWrapper');
+      if (!wrapperEl) return;
+      let lastSwitchTime = 0;
+      const SWITCH_GUARD_MS = 500;
+
+      function triggerSwitch() {
+        const now = Date.now();
+        if (now - lastSwitchTime < SWITCH_GUARD_MS) return;
+        lastSwitchTime = now;
+        switchCamera();
+      }
+
+      wrapperEl.addEventListener('touchend', function (e) {
+        const now = Date.now();
+        if (now - lastTapTime < 300) {
+          e.preventDefault();
+          triggerSwitch();
+          lastTapTime = 0;
+        } else {
+          lastTapTime = now;
+        }
+      });
+      wrapperEl.addEventListener('dblclick', function () {
+        triggerSwitch();
+      });
+    })();
+
+    myIdInput.addEventListener('change', (e) => {
+      const newName = e.target.value.trim();
+      if (newName) {
+        myName = newName;
+        localStorage.setItem('myName', myName);
+        if (hasJoined) {
+          update(ref(rtdb, 'family_presence/' + myUid), { name: myName }).catch(() => {});
+        }
+      } else {
+        e.target.value = myName;
+      }
+    });
+
+    const screenShareBtn = document.getElementById('screenShareBtn');
+        var screenStream = null;
+        var screenTrack = null;
+        var screenWasMirrored = true;
+        var peerSharing = {};
+    
+        function setPeerVideoTrack(pc, track) {
+          var trs = pc.getTransceivers().filter((t) => t.receiver && t.receiver.track && t.receiver.track.kind === 'video' && t.mid !== null);
+          var tr = trs.find((t) => t.currentDirection === 'sendrecv' || t.currentDirection === 'sendonly') || trs[0];
+          if (!tr) return;
+          tr.sender.replaceTrack(track).then(() => applySenderParameters(pc)).catch(() => {});
+        }
+    
+        function setSharingFlag(on) {
+          var lw = document.getElementById('localVideoWrapper');
+          if (lw) lw.classList.toggle('screen-share', on);
+          if (hasJoined) {
+            update(ref(rtdb, 'family_presence/' + myUid), { sharing: on, lastSeen: Date.now() }).catch(() => {});
+          }
+        }
+    
+        async function startScreenShare() {
+          if (screenTrack || !isCommsLive) return;
+          try {
+            screenStream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: { ideal: 30 } }, audio: false });
+          } catch (e) {
+            screenStream = null;
+            return;
+          }
+          screenTrack = screenStream.getVideoTracks()[0] || null;
+          if (!screenTrack) {
+            screenStream.getTracks().forEach((t) => t.stop());
+            screenStream = null;
+            return;
+          }
+          try { if ('contentHint' in screenTrack) screenTrack.contentHint = 'detail'; } catch (e) {}
+          screenTrack.addEventListener('ended', stopScreenShare);
+          Object.values(peers).forEach((pc) => setPeerVideoTrack(pc, screenTrack));
+          screenWasMirrored = localVideo.classList.contains('mirrored');
+          localVideo.classList.remove('mirrored');
+          localVideo.srcObject = screenStream;
+          setSharingFlag(true);
+          screenShareBtn.textContent = 'STOP SHARING';
+          screenShareBtn.style.color = 'var(--accent-red)';
+          screenShareBtn.style.borderColor = 'var(--accent-red)';
+        }
+    
+        function stopScreenShare() {
+          if (!screenTrack && !screenStream) return;
+          var st = screenStream;
+          screenStream = null;
+          screenTrack = null;
+          if (st) st.getTracks().forEach((t) => { try { t.stop(); } catch (e) {} });
+          var cam = localStream ? (localStream.getVideoTracks()[0] || null) : null;
+          Object.values(peers).forEach((pc) => setPeerVideoTrack(pc, cam));
+          localVideo.srcObject = localStream;
+          localVideo.classList.toggle('mirrored', screenWasMirrored);
+          setSharingFlag(false);
+          screenShareBtn.textContent = 'SHARE SCREEN';
+          screenShareBtn.style.color = '';
+          screenShareBtn.style.borderColor = '';
+        }
+    
+        var isMobileBrowser = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) || window.matchMedia('(hover: none) and (pointer: coarse)').matches;
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia || isMobileBrowser) {
+          screenShareBtn.style.display = 'none';
+        } else {
+          document.body.appendChild(screenShareBtn);
+                screenShareBtn.onclick = () => { if (screenTrack) stopScreenShare(); else startScreenShare(); };
+        }
+    
+        var tabHidden = false;
+            var mediaSuspended = false;
+            var resumeBusy = false;
+        
+            function setPeerTrack(pc, kind, track) {
+              var trs = pc.getTransceivers().filter(function (t) { return t.receiver && t.receiver.track && t.receiver.track.kind === kind && t.mid !== null; });
+              var tr = trs.find(function (t) { return t.currentDirection === 'sendrecv' || t.currentDirection === 'sendonly'; }) || trs[0];
+              if (!tr) return;
+              tr.sender.replaceTrack(track).then(function () { applySenderParameters(pc); }).catch(function () {});
+            }
+        
+            function suspendMediaForHiddenTab() {
+              tabHidden = true;
+              document.querySelectorAll('#videoGrid video:not(#localVideo)').forEach(function (v) { v.muted = true; });
+              if (!localStream || mediaSuspended) return;
+              var tracks = localStream.getTracks();
+              if (!tracks.length) return;
+              tracks.forEach(function (t) {
+                if (!(t.kind === 'video' && screenTrack)) {
+                  Object.values(peers).forEach(function (pc) { setPeerTrack(pc, t.kind, null); });
+                }
+                localStream.removeTrack(t);
+                try { t.stop(); } catch (e) {}
+              });
+              mediaSuspended = true;
+            }
+        
+            async function resumeMediaForVisibleTab() {
+              tabHidden = false;
+              updateMediaState();
+              if (!mediaSuspended || !localStream || resumeBusy) return;
+              resumeBusy = true;
+              var ms = null;
+              try {
+                try {
+                  ms = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                      facingMode: { ideal: 'user' },
+                      width: { ideal: currentProfile.width },
+                      height: { ideal: currentProfile.height },
+                      frameRate: { ideal: currentProfile.frameRate }
+                    },
+                    audio: {
+                      echoCancellation: window.__AUDIO_FX,
+                      noiseSuppression: window.__AUDIO_FX,
+                      autoGainControl: window.__AUDIO_FX,
+                      sampleRate: currentProfile.audioSampleRate,
+                      latency: 0.01
+                    }
+                  });
+                } catch (e1) {
+                  ms = await navigator.mediaDevices.getUserMedia({
+                    video: false,
+                    audio: { echoCancellation: window.__AUDIO_FX, noiseSuppression: window.__AUDIO_FX, sampleRate: currentProfile.audioSampleRate }
+                  });
+                }
+              } catch (e2) {
+                ms = null;
+              }
+              resumeBusy = false;
+              if (!ms) return;
+              if (tabHidden) {
+                ms.getTracks().forEach(function (t) { try { t.stop(); } catch (e3) {} });
+                return;
+              }
+              mediaSuspended = false;
+              ms.getTracks().forEach(function (t) {
+                t.enabled = isCommsLive;
+                localStream.addTrack(t);
+                if (!(t.kind === 'video' && screenTrack)) {
+                  Object.values(peers).forEach(function (pc) { setPeerTrack(pc, t.kind, t); });
+                }
+              });
+              if (!screenTrack) localVideo.srcObject = localStream;
+              await configureLocalTrackForZeroLag();
+            }
+        
+            document.addEventListener('visibilitychange', function () {
+              if (document.hidden) suspendMediaForHiddenTab(); else resumeMediaForVisibleTab();
+            });
+        
+            var DIAL_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>';
+                var peerNames = {};
+            
+                function fmtNode(n) {
+                  return /^\d+$/.test(String(n)) ? String(parseInt(n, 10)) : (n || 'NODE');
+                }
+            
+                function refreshPaneNumbers() {
+                  Object.keys(peerNames).forEach(function (uid) {
+                    var w = document.getElementById(uid === myUid ? 'localVideoWrapper' : 'video-wrapper-' + uid);
+                    var t = w && w.querySelector('.pane-num-text');
+                    if (t) t.textContent = fmtNode(peerNames[uid]);
+                  });
+                }
+            
+                var TIER_ORDER = ['ultra', 'high', 'medium', 'low'];
+                    var cleanStrikes = 0;
+                    var cleanNeeded = 10;
+                
+                    function computeCeilingTier() {
+                      var c = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+                      var s = hwInfo.score || 0;
+                      var t = s >= 75 ? 'ultra' : (s >= 56 ? 'high' : (s >= 40 ? 'medium' : 'low'));
+                      var net = c && c.effectiveType ? c.effectiveType : '4g';
+                      var dl = c && typeof c.downlink === 'number' ? c.downlink : 10;
+                      var rt = c && typeof c.rtt === 'number' ? c.rtt : 45;
+                      if (t === 'ultra' && !(rt <= 60 && dl >= 10)) t = 'high';
+                      if ((c && c.saveData) || net === '2g' || net === 'slow-2g') t = 'low';
+                      else if (net === '3g' && TIER_ORDER.indexOf(t) < TIER_ORDER.indexOf('medium')) t = 'medium';
+                      return t;
+                    }
+                
+                    (function () {
+                      var c = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+                      if (!c || !c.addEventListener) return;
+                      c.addEventListener('change', function () {
+                        var ceil = computeCeilingTier();
+                        hwInfo.autoRecommendedTier = ceil;
+                        cleanStrikes = 0;
+                        if (qualityMode !== 'auto') return;
+                        if (TIER_ORDER.indexOf(currentTier) < TIER_ORDER.indexOf(ceil)) applyTierProfile(ceil, 'auto');
+                      });
+                    })();
+                
+                    function setupKeepAliveAudio() {
+      if (!keepAliveAudio) {
+        keepAliveAudio = new Audio('data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA');
+        keepAliveAudio.loop = true;
+        keepAliveAudio.play().catch(() => {});
+      }
+    }
+
+    async function attemptMediaRecovery() {
+      if (!hasMedia) {
+        try {
+          localStream = await navigator.mediaDevices.getUserMedia({
+            video: {
+              facingMode: { ideal: 'user' },
+              width: { ideal: currentProfile.width },
+              height: { ideal: currentProfile.height },
+              frameRate: { ideal: currentProfile.frameRate }
+            },
+            audio: {
+              echoCancellation: window.__AUDIO_FX,
+              noiseSuppression: window.__AUDIO_FX,
+              autoGainControl: window.__AUDIO_FX,
+              sampleRate: currentProfile.audioSampleRate,
+              latency: 0.01
+            }
+          });
+          localVideo.srcObject = localStream;
+          hasMedia = true;
+          await configureLocalTrackForZeroLag();
+        } catch (e) {
+          try {
+            localStream = await navigator.mediaDevices.getUserMedia({
+              video: false,
+              audio: { echoCancellation: window.__AUDIO_FX, noiseSuppression: window.__AUDIO_FX, sampleRate: currentProfile.audioSampleRate }
+            });
+            hasMedia = true;
+          } catch (err) {
+            alert("A/V DENIED BY OS SETTINGS.");
+            return;
+          }
+        }
+
+        Object.values(peers).forEach(pc => {
+          localStream.getTracks().forEach(track => {
+            pc.addTrack(track, localStream);
+          });
+          applySenderParameters(pc);
+        });
+      }
+    }
+
+    function updateMediaState() {
+      window.__pauseBgCanvas = isCommsLive;
+            if (!isCommsLive && screenTrack) stopScreenShare();
+
+      if (localStream) {
+        localStream.getTracks().forEach(t => t.enabled = isCommsLive);
+      }
+
+      const remoteVideos = document.querySelectorAll('#videoGrid video:not(#localVideo)');
+      remoteVideos.forEach(v => {
+              if (isCommsLive && !tabHidden) {
+          v.muted = true;
+          v.play().then(() => { v.muted = false; }).catch(() => {});
+        } else {
+          v.muted = true;
+        }
+      });
+
+      if (isCommsLive) {
+        waveform.classList.add('active');
+        videoCard.style.display = 'block';
+        statusText.textContent = "LINE LIVE (A/V)";
+        document.querySelector('.status-dot').classList.add('speaking');
+      } else {
+        waveform.classList.remove('active');
+        videoCard.style.display = 'none';
+        statusText.textContent = "STANDBY - MUTED";
+        document.querySelector('.status-dot').classList.remove('speaking');
+      }
+
+      if ('mediaSession' in navigator) {
+        navigator.mediaSession.playbackState = isCommsLive ? 'playing' : 'paused';
+      }
+
+      if (hasJoined) {
+        update(ref(rtdb, 'family_presence/' + myUid), {
+          speaking: isCommsLive,
+          tier: currentProfile.label,
+          lastSeen: Date.now()
+        }).catch(() => {});
+      }
+    }
+
+    function sendSignalToPeer(targetUid, type, payloadObj = null) {
+      return push(ref(rtdb, 'family_signals/' + targetUid), {
+        sender: myUid,
+        type: type,
+        payload: payloadObj ? JSON.stringify(payloadObj) : null,
+        timestamp: Date.now()
+      }).catch(() => {});
+    }
+
+    function endCall(isLocalAction = true) {
+      isCommsLive = false;
+      updateMediaState();
+      stopRinging();
+      cutCallBtn.style.display = 'none';
+      acceptCallBtn.style.display = 'none';
+
+      if (isLocalAction) {
+        onlineUids.forEach((uid) => {
+          if (uid !== myUid) {
+            sendSignalToPeer(uid, 'cut', null);
+          }
+        });
+      }
+    }
+
+    acceptCallBtn.onclick = async () => {
+      stopRinging();
+      try { audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)(); audioCtx.resume(); } catch (e) {}
+      await attemptMediaRecovery();
+      if (!hasMedia) return;
+      isCommsLive = true;
+      updateMediaState();
+
+      acceptCallBtn.style.display = 'none';
+      cutCallBtn.style.display = 'block';
+    };
+
+    cutCallBtn.onclick = () => {
+      endCall(true);
+    };
+
+    const buzzCooldowns = {};
+    const BUZZ_COOLDOWN_MS = 3000;
+    let audioCtx = null;
+
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission().catch(() => {});
+    }
+
+    function playConnectBeep() {
+      try {
+        audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        const now = audioCtx.currentTime;
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(1200, now);
+        osc.frequency.exponentialRampToValueAtTime(1800, now + 0.1);
+        gain.gain.setValueAtTime(0.0001, now);
+        gain.gain.linearRampToValueAtTime(0.3, now + 0.05);
+        gain.gain.linearRampToValueAtTime(0.0001, now + 0.2);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start(now);
+        osc.stop(now + 0.25);
+      } catch (e) {}
+    }
+
+    function playBuzzTone() {
+      try {
+        audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        const now = audioCtx.currentTime;
+        for (let i = 0; i < 3; i++) {
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          osc.type = 'square';
+          osc.frequency.value = 880;
+          gain.gain.setValueAtTime(0.0001, now + i * 0.35);
+          gain.gain.exponentialRampToValueAtTime(0.3, now + i * 0.35 + 0.02);
+          gain.gain.exponentialRampToValueAtTime(0.0001, now + i * 0.35 + 0.25);
+          osc.connect(gain);
+          gain.connect(audioCtx.destination);
+          osc.start(now + i * 0.35);
+          osc.stop(now + i * 0.35 + 0.3);
+        }
+      } catch (e) {}
+    }
+
+    function showBuzzToast(text) {
+      const toast = document.getElementById('buzzToast');
+      const toastText = document.getElementById('buzzToastText');
+      toastText.textContent = text;
+      toast.classList.add('show');
+    }
+
+    function hideBuzzToast() {
+      document.getElementById('buzzToast').classList.remove('show');
+    }
+
+    function startRinging(fromName) {
+      if (ringingInterval) return;
+
+      if (isCommsLive) {
+        isCommsLive = false;
+        updateMediaState();
+      }
+
+      showBuzzToast('INCOMING PING: ' + fromName);
+      document.body.classList.add('incoming-buzz');
+
+      acceptCallBtn.style.display = 'block';
+      cutCallBtn.style.display = 'none';
+
+      const triggerRing = () => {
+        playBuzzTone();
+        if (navigator.vibrate) navigator.vibrate([400, 150, 400, 150, 400]);
+      };
+
+      triggerRing();
+      ringingInterval = setInterval(triggerRing, 3000);
+    }
+
+    function stopRinging() {
+      if (ringingInterval) {
+        clearInterval(ringingInterval);
+        ringingInterval = null;
+      }
+      document.body.classList.remove('incoming-buzz');
+      hideBuzzToast();
+      acceptCallBtn.style.display = 'none';
+    }
+
+    async function sendBuzz(targetUid, btnEl) {
+      try { audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)(); audioCtx.resume(); } catch (e) {}
+
+      const now = Date.now();
+      if (buzzCooldowns[targetUid] && now < buzzCooldowns[targetUid]) return;
+      buzzCooldowns[targetUid] = now + BUZZ_COOLDOWN_MS;
+
+      const originalText = btnEl ? btnEl.innerHTML : null;
+      if (btnEl) { btnEl.disabled = true; btnEl.textContent = 'TX..'; }
+
+      if (!isCommsLive) {
+        await attemptMediaRecovery();
+        if (hasMedia) {
+          isCommsLive = true;
+          updateMediaState();
+          cutCallBtn.style.display = 'block';
+          acceptCallBtn.style.display = 'none';
+          stopRinging();
+        }
+      }
+
+      const buzzPayload = { sender: myUid, senderName: myName, timestamp: now };
+      if (targetUid === 'all') {
+        onlineUids.forEach((uid) => {
+          if (uid !== myUid) {
+            push(ref(rtdb, 'family_buzz/' + uid), buzzPayload).catch(() => {});
+          }
+        });
+      } else {
+        push(ref(rtdb, 'family_buzz/' + targetUid), buzzPayload).catch(() => {});
+      }
+
+      relayPushBuzz(targetUid);
+
+      if (btnEl) {
+        setTimeout(() => { btnEl.disabled = false; btnEl.innerHTML = originalText; }, BUZZ_COOLDOWN_MS);
+      }
+    }
+
+    function listenForBuzzes() {
+      const myBuzzRef = ref(rtdb, 'family_buzz/' + myUid);
+      onChildAdded(myBuzzRef, (snap) => {
+        const data = snap.val();
+        remove(snap.ref).catch(() => {});
+        if (data && data.sender !== myUid && (Date.now() - (data.timestamp || 0) < 30000)) {
+          startRinging(data.senderName || 'AGENT');
+        }
+      });
+    }
+
+    const buzzAllBtnEl = document.getElementById('buzzAllBtn');
+    buzzAllBtnEl.onclick = () => sendBuzz('all', buzzAllBtnEl);
+
+    function createPeer(targetUid) {
+      let pc;
+      try { pc = new RTCPeerConnection(servers); }
+      catch (e) { pc = new RTCPeerConnection({ ...servers, iceServers: BASE_ICE }); }
+      candidateQueues[targetUid] = [];
+
+      if (localStream) {
+        localStream.getTracks().forEach(track => {
+          pc.addTrack(track, localStream);
+        });
+        applySenderParameters(pc);
+              }
+        
+              if (!localStream || localStream.getVideoTracks().length === 0) {
+                try { pc.addTransceiver('video', { direction: 'sendrecv' }); } catch (e) {}
+              }
+              if (!localStream || localStream.getAudioTracks().length === 0) {
+                try { pc.addTransceiver('audio', { direction: 'recvonly' }); } catch (e) {}
+              }
+        
+              pc.ontrack = (event) => {
+        applyCellularMicroBufferToReceiver(event.receiver, event.track.kind);
+
+        let wrapper = document.getElementById('video-wrapper-' + targetUid);
+        if (!wrapper) {
+          wrapper = document.createElement('div');
+          wrapper.className = 'video-wrapper active';
+          wrapper.id = 'video-wrapper-' + targetUid;
+
+          const vid = document.createElement('video');
+          vid.id = 'video-' + targetUid;
+          vid.autoplay = true;
+          vid.playsInline = true;
+          vid.muted = true;
+
+          const label = document.createElement('div');
+          label.className = 'video-label';
+          label.id = 'video-label-' + targetUid;
+          label.innerHTML = `<span>NODE ${targetUid}</span><span class="res-tag" id="remote-res-${targetUid}">4G/5G LIVE</span>`;
+
+          vid.addEventListener('loadedmetadata', () => {
+            const rTag = document.getElementById('remote-res-' + targetUid);
+            if (rTag && vid.videoWidth) {
+              rTag.textContent = `${vid.videoWidth}×${vid.videoHeight}`;
+            }
+          });
+
+          wrapper.appendChild(vid);
+          wrapper.appendChild(label);
+                    var paneNum = document.createElement('div');
+                    paneNum.className = 'pane-num';
+                    var paneNumText = document.createElement('span');
+                    paneNumText.className = 'pane-num-text';
+                    var paneBuzz = document.createElement('button');
+                    paneBuzz.className = 'buzz-member-btn';
+                    paneBuzz.title = 'BUZZ';
+                    paneBuzz.innerHTML = DIAL_SVG;
+                    paneBuzz.onclick = () => sendBuzz(targetUid, paneBuzz);
+                    paneNum.appendChild(paneNumText);
+                    paneNum.appendChild(paneBuzz);
+                    wrapper.appendChild(paneNum);
+                    refreshPaneNumbers();
+          document.getElementById('videoGrid').appendChild(wrapper);
+          updateVideoGrid();
+        }
+
+        const videoEl = document.getElementById('video-' + targetUid);
+        var remoteMs = videoEl.srcObject instanceof MediaStream ? videoEl.srcObject : new MediaStream();
+                if (remoteMs.getTracks().indexOf(event.track) === -1) remoteMs.addTrack(event.track);
+                if (videoEl.srcObject !== remoteMs) videoEl.srcObject = remoteMs;
+                wrapper.classList.toggle('screen-share', !!peerSharing[targetUid]);
+        videoEl.muted = true;
+        videoEl.play().then(() => {
+          videoEl.muted = !isCommsLive || tabHidden;
+        }).catch(() => {});
+      };
+
+      pc.onicecandidate = (event) => {
+        if (event.candidate) {
+          sendSignalToPeer(targetUid, 'candidate', event.candidate.toJSON());
+        }
+      };
+
+      pc.onconnectionstatechange = () => {
+        const state = pc.connectionState;
+        if (state === 'connected') {
+          reconnectAttempts[targetUid] = 0;
+                    if (localStream) localStream.getTracks().forEach(function (t) { if (!pc.getSenders().some(function (s) { return s.track === t; })) setPeerTrack(pc, t.kind, t); });
+                              if (screenTrack) setPeerVideoTrack(pc, screenTrack);
+          applySenderParameters(pc);
+          if (reconnectTimers[targetUid]) {
+            clearTimeout(reconnectTimers[targetUid]);
+            delete reconnectTimers[targetUid];
+          }
+        } else if (state === 'disconnected') {
+          setTimeout(() => {
+            if (peers[targetUid] === pc && pc.connectionState !== 'connected') {
+              cleanupPeer(targetUid);
+              scheduleReconnect(targetUid);
+            }
+          }, DISCONNECT_GRACE_MS);
+        } else if (state === 'failed' || state === 'closed') {
+          cleanupPeer(targetUid);
+          scheduleReconnect(targetUid);
+        }
+      };
+
+      peers[targetUid] = pc;
+      return pc;
+    }
+
+    function processQueuedCandidates(targetUid, pc) {
+      if (candidateQueues[targetUid]) {
+        candidateQueues[targetUid].forEach(cand => pc.addIceCandidate(cand).catch(() => {}));
+        candidateQueues[targetUid] = [];
+      }
+    }
+
+    function listenForSignals() {
+      const mySignalsRef = ref(rtdb, 'family_signals/' + myUid);
+      onChildAdded(mySignalsRef, (snap) => {
+        const data = snap.val();
+        remove(snap.ref).catch(() => {});
+        if (!data || data.sender === myUid) return;
+
+        // Ignore stale signals older than 25 seconds
+        if (data.timestamp && (Date.now() - data.timestamp > 25000)) return;
+
+        const sender = data.sender;
+
+        if (data.type === 'cut') {
+          endCall(false);
+          return;
+        }
+
+        const payload = data.payload ? JSON.parse(data.payload) : null;
+
+        try {
+          if (data.type === 'offer') {
+            if (peers[sender]) {
+              cleanupPeer(sender);
+            }
+            const pc = createPeer(sender);
+            pc.setRemoteDescription(new RTCSessionDescription(payload)).then(() => {
+              processQueuedCandidates(sender, pc);
+              return pc.createAnswer();
+            }).then(answer => {
+              answer.sdp = boostSdpForMobileLowLatency(answer.sdp, currentProfile);
+              pc.setLocalDescription(answer);
+              sendSignalToPeer(sender, 'answer', answer);
+            });
+          } else if (data.type === 'answer') {
+            const pc = peers[sender];
+            if (pc) {
+              pc.setRemoteDescription(new RTCSessionDescription(payload)).then(() => processQueuedCandidates(sender, pc));
+            }
+          } else if (data.type === 'candidate') {
+            const pc = peers[sender];
+            const candidate = new RTCIceCandidate(payload);
+            if (pc && pc.remoteDescription) {
+              pc.addIceCandidate(candidate).catch(() => {});
+            } else {
+              candidateQueues[sender] = candidateQueues[sender] || [];
+              candidateQueues[sender].push(candidate);
+            }
+          }
+        } catch (e) {}
+      });
+    }
+
+    function listenForPresence() {
+      const membersList = document.getElementById('membersList');
+      const presenceRef = ref(rtdb, 'family_presence');
+
+      onValue(presenceRef, (snapshot) => {
+        membersList.innerHTML = '';
+        const now = Date.now();
+        const allNodes = snapshot.val() || {};
+        const seenInSnapshot = new Set();
+
+        Object.keys(allNodes).forEach((uid) => {
+          const data = allNodes[uid];
+          if (!data || !data.online || (data.lastSeen && (now - data.lastSeen > 65000))) {
+            onlineUids.delete(uid);
+            if (reconnectTimers[uid]) {
+              clearTimeout(reconnectTimers[uid]);
+              delete reconnectTimers[uid];
+            }
+            delete reconnectAttempts[uid];
+            cleanupPeer(uid);
+            return;
+          }
+
+          seenInSnapshot.add(uid);
+          onlineUids.add(uid);
+
+          const wasLive = agentPresenceStates[uid];
+          if (data.speaking && !wasLive && uid !== myUid) {
+            playConnectBeep();
+          }
+          agentPresenceStates[uid] = data.speaking;
+                    peerNames[uid] = data.name;
+                    peerSharing[uid] = !!data.sharing;
+                    var peerWrap = document.getElementById('video-wrapper-' + uid);
+                    if (peerWrap) peerWrap.classList.toggle('screen-share', peerSharing[uid]);
+
+          const li = document.createElement('li');
+          const nameWrap = document.createElement('div');
+          nameWrap.className = 'member-name';
+
+          const dot = document.createElement('span');
+          dot.className = 'status-dot ' + (data.online ? 'connected' : 'error') + (data.speaking ? ' speaking' : '');
+          nameWrap.appendChild(dot);
+
+          const peerHwInfo = '';
+          nameWrap.appendChild(document.createTextNode((/^\d+$/.test(String(data.name)) ? String(parseInt(data.name, 10)) : (data.name || 'NODE')) + peerHwInfo));
+          li.appendChild(nameWrap);
+
+          if (uid !== myUid) {
+            const buzzBtn = document.createElement('button');
+            buzzBtn.className = 'buzz-member-btn';
+            buzzBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>';
+                        buzzBtn.title = 'BUZZ';
+
+            const cooldownEnd = buzzCooldowns[uid];
+            if (cooldownEnd && Date.now() < cooldownEnd) {
+              buzzBtn.disabled = true;
+              buzzBtn.textContent = 'TX...';
+            }
+            buzzBtn.onclick = () => sendBuzz(uid, buzzBtn);
+            li.appendChild(buzzBtn);
+          }
+
+          membersList.appendChild(li);
+
+          if (uid !== myUid && myUid > uid) {
+            if (!peers[uid] || peers[uid].connectionState === 'closed') {
+              initiateCall(uid);
+            }
+          }
+        });
+
+        refreshPaneNumbers();
+                // Clean up any peer that disappeared completely from the RTDB tree
+        Array.from(onlineUids).forEach((uid) => {
+          if (!seenInSnapshot.has(uid)) {
+            onlineUids.delete(uid);
+            cleanupPeer(uid);
+          }
+        });
+      });
+    }
+
+    async function initiateCall(targetUid) {
+      await Promise.race([turnReady, new Promise((r) => setTimeout(r, 1500))]);
+      const pc = createPeer(targetUid);
+      const offer = await pc.createOffer();
+      offer.sdp = boostSdpForMobileLowLatency(offer.sdp, currentProfile);
+      await pc.setLocalDescription(offer);
+      await sendSignalToPeer(targetUid, 'offer', offer);
+    }
+
+    async function subscribeToPush() {
+      if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+      if (!GLITCH_WORKER_URL || !VAPID_PUBLIC_KEY || GLITCH_WORKER_URL.includes('YOUR-GLITCH-PROJECT')) return;
+      try {
+        const permission = await Notification.requestPermission();
+        if (permission !== 'granted') return;
+        const registration = await navigator.serviceWorker.ready;
+        let sub = await registration.pushManager.getSubscription();
+        if (!sub) {
+          sub = await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY) });
+        }
+        await set(ref(rtdb, 'family_push_subscriptions/' + myUid), {
+          subscription: JSON.stringify(sub.toJSON()),
+          name: myName,
+          updatedAt: Date.now()
+        });
+      } catch (e) {}
+    }
+
+    async function relayPushBuzz(targetUid) {
+      if (!GLITCH_WORKER_URL || !VAPID_PUBLIC_KEY || GLITCH_WORKER_URL.includes('YOUR-GLITCH-PROJECT')) return;
+      try {
+        let targetSubs = [];
+        if (targetUid === 'all') {
+          const snap = await get(ref(rtdb, 'family_push_subscriptions'));
+          const allSubs = snap.val() || {};
+          Object.keys(allSubs).forEach((uid) => {
+            if (uid !== myUid && allSubs[uid] && allSubs[uid].subscription) {
+              targetSubs.push(allSubs[uid].subscription);
+            }
+          });
+        } else {
+          const snap = await get(ref(rtdb, 'family_push_subscriptions/' + targetUid));
+          if (snap.exists() && snap.val().subscription) {
+            targetSubs.push(snap.val().subscription);
+          }
+        }
+        for (const subStr of targetSubs) {
+          await fetch(GLITCH_WORKER_URL + '/buzz', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ subscription: JSON.parse(subStr), senderName: myName })
+          });
+        }
+      } catch (e) {}
+    }
+
+    window.addEventListener('DOMContentLoaded', async () => {
+      try { audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {}
+
+      refreshHardwareTelemetryUI();
+
+      measureScreenRefreshRate().then((hz) => {
+        hwInfo.refreshRateHz = hz;
+        refreshHardwareTelemetryUI();
+      });
+
+      const mediaPromise = (window.__earlyMediaPromise || navigator.mediaDevices.getUserMedia({
+              video: {
+                facingMode: { ideal: 'user' },
+                width: { ideal: currentProfile.width },
+                height: { ideal: currentProfile.height },
+                frameRate: { ideal: currentProfile.frameRate }
+              },
+              audio: { echoCancellation: window.__AUDIO_FX, noiseSuppression: window.__AUDIO_FX, sampleRate: currentProfile.audioSampleRate, latency: 0.01 }
+            })).catch(() => null).then((full) => full || navigator.mediaDevices.getUserMedia({
+              video: false,
+              audio: { echoCancellation: window.__AUDIO_FX, noiseSuppression: window.__AUDIO_FX, sampleRate: currentProfile.audioSampleRate, latency: 0.01 }
+            }).catch(() => null));
+
+      const mediaReadyPromise = (async () => {
+        const mediaResult = await mediaPromise;
+        if (mediaResult) {
+          localStream = mediaResult;
+          hasMedia = true;
+          if (localStream.getVideoTracks().length > 0) {
+            localVideo.srcObject = localStream;
+          }
+          await configureLocalTrackForZeroLag();
+        } else {
+          hasMedia = false;
+        }
+
+        if (localStream) {
+          localStream.getTracks().forEach(t => t.enabled = true);
+          isCommsLive = true;
+        } else {
+          isCommsLive = false;
+        }
+
+        setupKeepAliveAudio();
+        updateMediaState();
+        updateVideoGrid();
+        refreshHardwareTelemetryUI();
+      })();
+
+      // Clear any leftover signals/buzzes in our RTDB inbox and assign next ID in parallel
+      const idPromise = Promise.all([
+        remove(ref(rtdb, 'family_signals/' + myUid)).catch(() => {}),
+        remove(ref(rtdb, 'family_buzz/' + myUid)).catch(() => {}),
+        get(ref(rtdb, 'family_presence'))
+      ]).then(([, , presenceSnap]) => {
+        let maxId = 0;
+        const now = Date.now();
+        const allNodes = presenceSnap.val() || {};
+
+        Object.keys(allNodes).forEach((uid) => {
+          const data = allNodes[uid];
+          if (data && data.online && (!data.lastSeen || (now - data.lastSeen < 65000)) && data.name) {
+            const num = parseInt(data.name, 10);
+            if (!isNaN(num) && num > maxId) {
+              maxId = num;
+            }
+          }
+        });
+
+        const nextIdNumber = maxId + 1;
+        myName = String(nextIdNumber).padStart(3, '0');
+        localStorage.setItem('myName', myName);
+        myIdInput.value = myName;
+      }).catch(() => {
+        myName = "001";
+        myIdInput.value = myName;
+      });
+
+      await Promise.all([mediaReadyPromise, idPromise]);
+
+      try {
+        const myPresenceRef = ref(rtdb, 'family_presence/' + myUid);
+        const connectedRef = ref(rtdb, '.info/connected');
+
+        // Native WebSocket onDisconnect hook: marks node offline the millisecond 4G/5G or tab closes
+        onValue(connectedRef, (snap) => {
+          if (snap.val() === true) {
+            onDisconnect(myPresenceRef).update({
+              online: false,
+              speaking: false,
+              lastSeen: Date.now()
+            }).catch(() => {});
+
+            set(myPresenceRef, {
+              name: myName,
+              online: true,
+              speaking: isCommsLive,
+              hasMic: hasMedia,
+              hwSummary: `${hwInfo.cores}C•${currentProfile.label}`,
+              lastSeen: Date.now()
+            }).catch(() => {});
+          }
+        });
+
+        hasJoined = true;
+
+        setInterval(() => {
+          if (hasJoined) {
+            update(myPresenceRef, {
+              lastSeen: Date.now(),
+              hwSummary: `${hwInfo.cores}C•${currentProfile.label}`
+            }).catch(() => {});
+          }
+        }, 30000);
+
+        subscribeToPush();
+        listenForSignals();
+        listenForPresence();
+        listenForBuzzes();
+        startAdaptiveMonitor();
+
+        const markOffline = () => {
+          update(myPresenceRef, { name: myName, online: false, speaking: false, lastSeen: Date.now() }).catch(() => {});
+        };
+        window.addEventListener('beforeunload', markOffline);
+        window.addEventListener('pagehide', markOffline);
+
+        if (isCommsLive) {
+          cutCallBtn.style.display = 'block';
+          acceptCallBtn.style.display = 'none';
+        }
+      } catch (e) {
+        statusText.textContent = "UPLINK FAILED. RETRY.";
+      }
+    });
+  </script>
+</body>
+</html>

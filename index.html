@@ -1758,10 +1758,17 @@
           wrapper.id = 'video-wrapper-' + targetUid;
 
           const vid = document.createElement('video');
-          vid.id = 'video-' + targetUid;
-          vid.autoplay = true;
-          vid.playsInline = true;
-          vid.muted = true;
+                    vid.id = 'video-' + targetUid;
+                    vid.autoplay = true;
+                    vid.playsInline = true;
+                    vid.muted = true;
+          
+                    const screenVid = document.createElement('video');
+                    screenVid.id = 'screen-video-' + targetUid;
+                    screenVid.autoplay = true;
+                    screenVid.playsInline = true;
+                    screenVid.muted = true;
+                    screenVid.style.display = 'none';
 
           const label = document.createElement('div');
           label.className = 'video-label';
@@ -1795,14 +1802,21 @@
         }
 
         const videoEl = document.getElementById('video-' + targetUid);
-        var remoteMs = videoEl.srcObject instanceof MediaStream ? videoEl.srcObject : new MediaStream();
-                if (remoteMs.getTracks().indexOf(event.track) === -1) remoteMs.addTrack(event.track);
-                if (videoEl.srcObject !== remoteMs) videoEl.srcObject = remoteMs;
-                wrapper.classList.toggle('screen-share', !!peerSharing[targetUid]);
-        videoEl.muted = true;
-        videoEl.play().then(() => {
-          videoEl.muted = !isCommsLive || tabHidden;
-        }).catch(() => {});
+                const screenVideoEl = document.getElementById('screen-video-' + targetUid);
+                const isScreenTrack = event.track.kind === 'video' && (!!peerSharing[targetUid] || (videoEl.srcObject instanceof MediaStream && videoEl.srcObject.getVideoTracks().length > 0 && videoEl.srcObject.getVideoTracks()[0] !== event.track));
+                const targetEl = isScreenTrack && screenVideoEl ? screenVideoEl : videoEl;
+                var remoteMs = targetEl.srcObject instanceof MediaStream ? targetEl.srcObject : new MediaStream();
+                        if (remoteMs.getTracks().indexOf(event.track) === -1) remoteMs.addTrack(event.track);
+                        if (targetEl.srcObject !== remoteMs) targetEl.srcObject = remoteMs;
+                        if (screenVideoEl && event.track.kind === 'video') {
+                          screenVideoEl.style.display = isScreenTrack ? 'block' : 'none';
+                          videoEl.style.display = isScreenTrack ? 'none' : 'block';
+                        }
+                        wrapper.classList.toggle('screen-share', !!peerSharing[targetUid]);
+                targetEl.muted = true;
+                targetEl.play().then(() => {
+                  targetEl.muted = !isCommsLive || tabHidden;
+                }).catch(() => {});
       };
 
       pc.onicecandidate = (event) => {

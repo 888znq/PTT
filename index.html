@@ -1961,7 +1961,12 @@
             const pc = createPeer(sender);
             pc.setRemoteDescription(new RTCSessionDescription(payload)).then(() => {
               processQueuedCandidates(sender, pc);
-              return pc.createAnswer();
+                            pc.getTransceivers().forEach((t) => {
+                              try {
+                                if (t.receiver && t.receiver.track && t.receiver.track.kind === 'video' && t.currentDirection === null && t.direction === 'recvonly') t.direction = 'sendrecv';
+                              } catch (e) {}
+                            });
+                            return pc.createAnswer();
             }).then(answer => {
               answer.sdp = boostSdpForMobileLowLatency(answer.sdp, currentProfile);
               pc.setLocalDescription(answer);
